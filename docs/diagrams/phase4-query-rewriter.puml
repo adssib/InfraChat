@@ -1,0 +1,129 @@
+@startuml phase4-query-rewriter
+' InfraChat — Phase 4: Phase 3 + a small-LLM query rewriter at the head of the query path
+' Contracts: docs/SPEC.md ("Contracts") · Build order: docs/ROADMAP.md
+' Render: plantuml -tpng phase4-query-rewriter.puml
+
+title InfraChat — Phase 4: + Query Rewriter\n<size:12>a small, cheap LLM rewrites and expands the question before retrieval</size>
+
+skinparam shadowing false
+skinparam componentStyle uml2
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+skinparam ArrowColor #33475B
+skinparam ArrowFontColor #33475B
+skinparam ArrowFontSize 11
+skinparam package {
+  BackgroundColor #FBFCFD
+  BorderColor #8FA3B8
+  FontColor #33475B
+  FontStyle bold
+}
+skinparam component {
+  BackgroundColor #EEF2F7
+  BorderColor #33475B
+  FontColor #1A2733
+}
+skinparam folder {
+  BackgroundColor #EEF2F7
+  BorderColor #33475B
+}
+skinparam database {
+  BackgroundColor #EEF2F7
+  BorderColor #33475B
+}
+
+package "OFFLINE — ingestion (batch: infrachat ingest)" as OFFLINE {
+  folder "Cloned corpus\n(kubernetes/website + docker/docs)" as Corpus
+  component "Corpus Loader" as Loader
+  component "Filter" as Filter
+  component "Chunker" as Chunker
+  component "Embedder" as Embedder <<seam>>
+  database  "Vector Store" as VectorStore <<seam>>
+  database  "Keyword Index\n(BM25)" as KeywordIndex <<seam>>
+}
+
+package "ONLINE — query (per request: infrachat ask)" as ONLINE {
+  component "Query" as Query
+  component "Query Rewriter" as Rewriter <<seam>> #FFD98E
+  component "LLM — rewriter\n(small / cheap model)" as LLMRewriter <<seam>> #FFD98E
+
+  package "Hybrid Retriever — the Retriever seam, new impl" as HYBRID {
+    component "Dense Retriever" as Retriever <<seam>>
+    component "Fusion\n(reciprocal rank fusion)" as Fusion
+  }
+
+  component "Reranker\n(cross-encoder)" as Reranker <<seam>>
+  component "Grounding Gate" as Gate <<gate>>
+  component "Prompt Builder" as Prompt
+  component "LLM — generator" as LLM <<seam>>
+  component "Citation Check" as CiteCheck <<gate>>
+  component "Answer + citations" as Answer #A9DFBF
+  component "REFUSE (below floor)\nNot found in the\nKubernetes or Docker docs." as RefuseFloor #F5B7B1
+  component "REFUSE (not grounded)\nInsufficient grounding\nto answer." as RefuseNotInDocs #F5B7B1
+}
+
+package "CROSS-CUTTING" as XCUT {
+  component "Eval Harness" as Eval <<eval>> #D7BDE2
+  file "eval scores\nhit-rate · grounding · refusal · latency" as EvalReport #D7BDE2
+}
+
+' ---- offline: unchanged from Phase 3 ----
+Corpus      --> Loader       : markdown files\n(k8s + docker trees)
+Loader      --> Filter       : candidate files
+Filter      --> Chunker      : allowed docs\n(secrets / binaries / oversized dropped)
+Chunker     --> Embedder     : chunks + provenance\n(source, source_doc, source_location)
+Embedder    --> VectorStore  : chunk vectors
+Chunker     --> KeywordIndex : the SAME chunks, tokenized\n(BM25 postings)
+
+' ---- online: the rewriter is prepended to the query path ----
+Query        --> Rewriter     : raw question\n("how do I make my image smaller?")
+Rewriter     ..> LLMRewriter  : rewrite prompt\n(one extra LLM call — this is the cost)
+LLMRewriter  --> Rewriter     : rewritten / expanded query\n("multi-stage build, reduce image size, COPY --from")
+Rewriter     --> Retriever    : rewritten query\n(both arms see it)
+Retriever    ..> Embedder     : embeds the rewritten query
+Retriever    ..> VectorStore  : query vector, retrieve_n=20
+VectorStore  --> Retriever    : dense top-20 (ranked)
+Retriever    ..> KeywordIndex : query terms, retrieve_n=20
+KeywordIndex --> Fusion       : keyword top-20 (ranked)
+Retriever    --> Fusion       : dense top-20 (ranked)
+Fusion       --> Reranker     : fused top-20 (RRF)
+Reranker     --> Gate         : reranked top-5
+Gate         --> RefuseFloor  : REFUSAL 1 — top-1 score < floor (F8)
+Gate         --> Prompt       : hits above floor
+Prompt       --> LLM          : grounded prompt\n(excerpts only, no outside knowledge)
+LLM          --> CiteCheck    : raw completion
+CiteCheck    --> Answer       : answer text + [source:location]\ncitations (F9/F10)
+CiteCheck    --> RefuseNotInDocs : REFUSAL 2 — LLM emitted NOT_IN_DOCS,\nor answer carries no matchable citation
+
+' ---- cross-cutting: eval instrumentation ----
+Eval            ..> Query   : the SAME fixed question set\n(k8s / docker / should-refuse)
+Reranker        ..> Eval    : reranked hits\n(retrieval hit-rate)
+Rewriter        ..> Eval    : added latency + token cost\n(what this component must earn back)
+Answer          ..> Eval    : grounded answers
+RefuseFloor     ..> Eval    : refusals
+RefuseNotInDocs ..> Eval    : refusals
+Eval            --> EvalReport : run_label "+rewriter"\n→ delta vs. Phase 3
+
+note as RewriteNote #FFF9E3
+  **NEW — Query Rewriter (F14), ""rewrite.enabled: true""**
+  Two LLM roles now, both behind the same ""LLMClient"" seam but
+  **configured independently**: a small/cheap model rewrites,
+  the generator answers.
+  This is the one addition that costs **latency on every query**,
+  so the eval measures the delta //and// the added latency —
+  a negative result here is a legitimate finding worth reporting.
+end note
+RewriteNote .. Rewriter
+
+legend right
+  |<#EEF2F7>   | carried over from an earlier phase |
+  |<#FFD98E>   | **NEW in this phase** |
+  |<#F5B7B1>   | refusal path |
+  |<#A9DFBF>   | answer rendered to the user |
+  |<#D7BDE2>   | eval harness (cross-cutting) |
+  | —▶ | data flowing through the pipeline |
+  | ┄▶ | lookup into a seam / eval instrumentation |
+  | «seam» | pluggable interface — SPEC "Contracts" |
+endlegend
+
+@enduml

@@ -9,13 +9,17 @@
 
 ## Build order
 
-| # | Phase | Delivers | Measure |
-|---|---|---|---|
-| **1** | **Baseline RAG** — all systems wired | ingest → filter → chunk → embed → vector store; dense retrieve → grounding gate (floor → refuse) → LLM answer with citations; **eval harness** | **Eval run #1 → baseline numbers** |
-| **2** | **+ Reranker** | insert a cross-encoder reranker between retrieve and ground (retrieve top-20 → rerank → keep top-5) | Eval run #2 vs. baseline → *did reranking help?* |
-| **3** | **+ Hybrid search** | add a BM25 keyword index; fuse dense + keyword (reciprocal rank fusion) before reranking | Eval run #3 vs. Phase 2 → *did hybrid help, esp. on exact-term queries?* |
-| **4** | **+ Query rewriter** | prepend a small/cheap LLM that rewrites/expands the query before retrieval | Eval run #4 vs. Phase 3 → *does rewriting earn its latency?* |
-| **5** | **Deep-dive + deploy + write-up** | consolidate all runs into one comparison table; deploy to HF Spaces / home-lab; write the blog/report | The story: baseline → +reranker → +hybrid → +rewriter |
+| # | Phase | Delivers | Measure | Diagram |
+|---|---|---|---|---|
+| **1** | **Baseline RAG** — all systems wired | ingest → filter → chunk → embed → vector store; dense retrieve → grounding gate (floor → refuse) → LLM answer with citations; **eval harness** | **Eval run #1 → baseline numbers** | [P1](images/phase1-baseline.png) |
+| **2** | **+ Reranker** | insert a cross-encoder reranker between retrieve and ground (retrieve top-20 → rerank → keep top-5) | Eval run #2 vs. baseline → *did reranking help?* | [P2](images/phase2-reranker.png) |
+| **3** | **+ Hybrid search** | add a BM25 keyword index; fuse dense + keyword (reciprocal rank fusion) before reranking | Eval run #3 vs. Phase 2 → *did hybrid help, esp. on exact-term queries?* | [P3](images/phase3-hybrid.png) |
+| **4** | **+ Query rewriter** | prepend a small/cheap LLM that rewrites/expands the query before retrieval | Eval run #4 vs. Phase 3 → *does rewriting earn its latency?* | [P4](images/phase4-query-rewriter.png) |
+| **5** | **Deep-dive + deploy + write-up** | consolidate all runs into one comparison table; deploy to HF Spaces / home-lab; write the blog/report | The story: baseline → +reranker → +hybrid → +rewriter | [final](images/final-architecture.png) |
+
+Each phase's diagram shows what it adds, in amber, on top of everything before it — the set reads
+as one system growing. Sources: [diagrams/](diagrams/); walkthrough:
+[ARCHITECTURE.md § How the system grows](ARCHITECTURE.md#how-the-system-grows).
 
 Phase 1 is the whole pipeline at its simplest — everything after asks *"does adding X beat this
 baseline?"* The eval harness (built in Phase 1) is the spine of the entire project.
@@ -52,8 +56,10 @@ Each component phase follows the same loop:
 - [ ] **Deployed**: live on Hugging Face Spaces (public URL) or self-hosted on the home-lab.
 - [ ] **Write-up**: a blog/report walking through the architecture and what each component bought,
       with numbers and honest conclusions.
-- [ ] Docs: [SPEC.md](SPEC.md), [ARCHITECTURE.md](ARCHITECTURE.md), per-phase PlantUML diagrams,
-      and 1–2 ADRs (start with "refuse over fabricate").
+- [x] Docs scaffolding: [SPEC.md](SPEC.md), [ARCHITECTURE.md](ARCHITECTURE.md), [EVAL.md](EVAL.md),
+      the per-phase PlantUML diagrams, and the first ADRs (starting with
+      [refuse over fabricate](decisions/0001-refuse-over-fabricate.md)).
+- [ ] An ADR per phase decision that actually gets made, with the numbers that forced it.
 - [ ] README leads with the refusal case and a cited answer — the project's POV.
 
 ## Notes on sequencing
@@ -72,9 +78,17 @@ Each component phase follows the same loop:
 
 ## Current status
 
+- **Phase 0 — docs and diagrams in place; no code yet.**
+  - ✅ [SPEC](SPEC.md) (contracts + config), [ARCHITECTURE](ARCHITECTURE.md) (components + risks),
+    [EVAL](EVAL.md) (question set + metrics).
+  - ✅ Five [PlantUML diagrams](diagrams/) — baseline through final, rendered to [images/](images/).
+  - ✅ ADRs [0001](decisions/0001-refuse-over-fabricate.md),
+    [0002](decisions/0002-null-object-seams.md),
+    [0003](decisions/0003-eval-harness-is-phase-1.md). Later decisions get an ADR when the phase
+    lands, not before.
 - **Phase 1 — not started.**
   - ⏳ Clone the two doc repos; confirm target subfolders + their markdown shape.
-  - ⏳ Corpus filter (D1–D6) — implement first; secrets exclusion (D5) is the hard rule.
+  - ⏳ Corpus filter (F2) — implement first; excluding secrets *before* embedding is the hard rule.
   - ⏳ Frontmatter-stripping chunker — the docs carry YAML frontmatter + template shortcodes.
   - ⏳ Local embedder + vector store behind the `Embedder` / `VectorStore` seams.
   - ⏳ Eval harness skeleton + first fixed question set (the spine).
