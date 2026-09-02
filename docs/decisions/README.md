@@ -13,7 +13,9 @@ and add a row below. When a decision changes, write a *new* ADR and mark the old
 | [0001](0001-refuse-over-fabricate.md) | Refuse over fabricate — two independent gates, floor and citation | 1 | Accepted |
 | [0002](0002-null-object-seams.md) | Every optional component is a config-toggled null object | 1 | Accepted |
 | [0003](0003-eval-harness-is-phase-1.md) | Build the eval harness in Phase 1, before any optional component | 1 | Accepted |
-| [0004](0004-sqlite-chunk-store.md) | SQLite as the chunk store; Postgres deferred to deployment | 1 | Accepted |
+| [0004](0004-sqlite-chunk-store.md) | SQLite as the chunk store; Postgres deferred to deployment | 1 | Superseded by 0005 |
+| [0005](0005-one-sqlite-file.md) | One SQLite file — chunks, manifest, vectors, keyword index | 1 | Accepted |
+| [0006](0006-pluggable-sources.md) | A doc set is a YAML entry, not a code change | 1 | Accepted |
 
 **Start with [ADR-0001](0001-refuse-over-fabricate.md)** — it's the decision the rest of the
 system is arranged around.
@@ -26,7 +28,8 @@ measurement or the constraint that settled it.
 
 | Decision | Forced in | What will settle it |
 |---|---|---|
-| **Chunking strategy** — fixed-size windows vs. markdown-heading-aware splitting | Phase 1 | the real shape of the two doc trees, once walked. It silently caps every later component's ceiling ([ARCHITECTURE § Assumptions](../ARCHITECTURE.md#assumptions--risks-on-the-record)). |
+| **Chunking strategy** — fixed-size windows vs. markdown-heading-aware splitting | Phase 1 | the real shape of the two doc trees, now walked: 277 markdown files, median ~8KB, Hugo shortcodes throughout. It silently caps every later component's ceiling. |
+| **Secret-pattern scope** — substring match vs. credential file forms | Phase 1 | `*secret*` currently excludes the Kubernetes Secrets docs; narrowing it is a security-relevant call |
 | **Corpus refresh** — stay on a pinned clone, or add clone-and-refresh | Phase 1 | whether stale answers actually bite during the first eval runs |
 | **Postgres migration** — move the chunk store and vectors to Postgres/pgvector for the public deploy | Phase 5 | whether the hosted demo needs it, once the measurements are locked ([ADR-0004](0004-sqlite-chunk-store.md) sequences this deliberately) |
 | **LLM provider + model** — which OpenAI-compatible endpoint, hosted or local | Phase 1 | cost and refusal-obedience on the real question set |

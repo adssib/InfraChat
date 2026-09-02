@@ -1,6 +1,8 @@
 # ADR-0004: SQLite as the chunk store; Postgres deferred to deployment
 
-- **Status:** Accepted
+- **Status:** **Superseded by [ADR-0005](0005-one-sqlite-file.md)** — the chunk-store and
+  deferred-Postgres decisions below still stand; only "Chroma remains the vector store" was
+  overturned, after a spike showed `sqlite-vec` folds vectors into the same file.
 - **Date:** 2026-08-30
 - **Phase:** 1 (forced), revisited at 5
 

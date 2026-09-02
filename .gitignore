@@ -1,0 +1,19 @@
+# the corpus clones and the built indexes are artifacts, never committed
+corpus/
+data/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# local config overrides
+*.local.yaml
+.env
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,39 @@
+# The corpus definition — WHAT gets ingested and how to clean it.
+#
+# Adding a doc set is an entry here, never a code change. Two things must be true
+# of a new source: its files are text, and `clean` names a strategy that knows how
+# to strip its markup.
+#
+# NOTE: adding a source changes the corpus, which invalidates comparison with every
+# earlier eval run. Add one at a phase boundary, then re-run the baseline.
+
+defaults:
+  exclude_globs:
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/_print/**"
+  secret_patterns: [".env", "*secret*", "*_key*", "credentials*"]
+  max_file_bytes: 100000
+
+sources:
+  - name: kubernetes
+    label: "Kubernetes"
+    repo: "https://github.com/kubernetes/website"
+    path: "corpus/kubernetes-website/content/en/docs/concepts"
+    include_ext: [".md"]
+    clean: hugo                    # Hugo shortcodes: {{< note >}}, glossary_tooltip
+
+  - name: docker
+    label: "Docker"
+    repo: "https://github.com/docker/docs"
+    path: "corpus/docker-docs/content/manuals/build"
+    include_ext: [".md", ".mdx"]
+    clean: hugo
+
+  # Adding Ansible later is exactly this — no code change:
+  # - name: ansible
+  #   label: "Ansible"
+  #   repo: "https://github.com/ansible/ansible"
+  #   path: "corpus/ansible/docs/docsite/rst"
+  #   include_ext: [".rst"]
+  #   clean: sphinx-rst

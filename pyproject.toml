@@ -1,0 +1,23 @@
+[project]
+name = "infrachat"
+version = "0.1.0"
+description = "RAG over the Kubernetes and Docker docs — answers with citations, or refuses."
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0",      # config validation
+    "pyyaml>=6.0",        # config + sources files
+    "fastembed>=0.8",     # embeddings (ONNX, no torch) + cross-encoder reranker (Phase 2)
+    "sqlite-vec>=0.1.9",  # vector search inside the chunk store
+    "openai>=1.0",        # OpenAI-compatible client -> Groq / local
+    "gradio>=4.0",        # demo UI
+]
+
+[project.scripts]
+infrachat = "infrachat.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["infrachat*"]

@@ -1,0 +1,61 @@
+# The experiment knobs. One config = one eval run. The corpus lives in sources.yaml.
+#
+# Everything below the PHASE 1 line is commented out until its phase lands. This is
+# safe because every optional component defaults to its null object in code — a
+# commented-out `rerank:` block and `rerank.enabled: false` mean exactly the same
+# thing. Uncomment a block to turn the experiment on.
+
+infrachat:
+
+  # ---------------------------------------------------------------- PHASE 1
+  data_dir: "./data"                 # infrachat.db lives here — one Docker volume
+
+  corpus:
+    sources_file: "sources.yaml"
+
+  chunk:
+    size: 800
+    overlap: 100
+
+  embedder:
+    model: "BAAI/bge-small-en-v1.5"  # 384-dim, ONNX via fastembed, no torch
+
+  retrieval:
+    retrieve_n: 20                   # candidates fetched (only matters once rerank is on)
+    k: 5                             # final chunks sent to the LLM
+    floor: 0.55                      # below this top-1 score => refuse (F8)
+                                     # measured: 0.35 refuses nothing with bge-small
+
+  eval:
+    question_set: "eval/questions.yaml"
+    results_dir: "eval/runs"
+    run_label: "baseline"
+
+  # The generator. Needed from build-step 5 (`ask`) onward — `ingest` and
+  # `ask --retrieval-only` run without it, so no API key is required to get started.
+  # llm:
+  #   base_url: "https://api.groq.com/openai/v1"
+  #   model: "llama-3.3-70b-versatile"
+  #   api_key_env: "INFRACHAT_LLM_API_KEY"   # the env var NAME, never the key
+  #   max_context_chunks: 5
+
+  # ---------------------------------------------------------------- PHASE 2
+  # A cross-encoder re-scores the top-20 jointly and keeps the best 5.
+  # rerank:
+  #   enabled: true
+  #   model: "Xenova/ms-marco-MiniLM-L-6-v2"
+
+  # ---------------------------------------------------------------- PHASE 3
+  # A BM25 arm (SQLite FTS5) fused with dense results by reciprocal rank.
+  # Enabling this needs a re-ingest — it adds an index to the offline path.
+  # retrieval:
+  #   hybrid:
+  #     enabled: true
+  #     fusion: rrf
+
+  # ---------------------------------------------------------------- PHASE 4
+  # A small, cheap LLM rewrites the question before retrieval. Costs an LLM call
+  # on every query — the eval measures whether that earns its latency.
+  # rewrite:
+  #   enabled: true
+  #   model: "llama-3.1-8b-instant"
