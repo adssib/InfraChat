@@ -14,17 +14,24 @@ each measured against that baseline.
 
 ## Corpus — what documents, from where
 
-| Source | Repository path | Content |
-|---|---|---|
-| **Kubernetes docs** | `github.com/kubernetes/website` → `/content/en/docs/concepts` | Pods, Services, Deployments, networking, storage |
-| **Docker docs** | `github.com/docker/docs` → `/content` | builds, Compose, networking, storage, engine |
+The corpus is **declared in `sources.yaml`, not fixed in code** — adding a doc set is a YAML
+entry ([ADR-0006](decisions/0006-pluggable-sources.md)). Two are configured today:
 
-- Both are large **markdown** trees — prose that embeds and retrieves cleanly.
-- v1 clones each repo at a **pinned commit** and ingests from disk. **Start with a subfolder** of
-  each (Kubernetes `concepts/workloads`, Docker `content/manuals/build`) to keep first runs cheap,
-  then widen.
+| Source | Repository → path | `clean` | Content |
+|---|---|---|---|
+| **Kubernetes** | `kubernetes/website` → `content/en/docs/concepts` | `hugo` | Pods, Services, Deployments, networking, storage |
+| **Docker** | `docker/docs` → `content/manuals/build` | `hugo` | builds, Bake, multi-stage, caching, CI |
+
+Each entry declares its root path, allowed extensions, and a **`clean` strategy** naming the
+markup to strip (`plain` · `hugo` · `sphinx-rst`). That last field is what makes a differently
+formatted doc set — Ansible's reStructuredText, say — a config change rather than a code change.
+
+- Sources are cloned at a **pinned commit** and ingested from disk. **Sparse-clone the configured
+  subfolder** rather than the whole repo: the two above are 13MB together, versus ~2GB full.
 - **No live fetching in v1.** A clone-and-refresh step is a noted
   [out-of-scope](#out-of-scope-deliberate-bounds) extension.
+- ⚠️ **Adding a source invalidates every prior eval run** — it changes the corpus and can flip a
+  should-refuse question into an answerable one. Add one at a phase boundary, then re-baseline.
 
 ## Functional requirements
 
@@ -66,7 +73,7 @@ author's.
 |---|---|---|
 | `id` | stable chunk identifier | a citation must map back to one specific chunk |
 | `text` | the excerpt | this is what the LLM is allowed to use |
-| `source` | `kubernetes` \| `docker` | F10 — every citation names its doc set |
+| `source` | a configured source name, e.g. `kubernetes` | open string validated at config load against `sources.yaml` — **not a closed enum** (F10, [ADR-0006](decisions/0006-pluggable-sources.md)) |
 | `source_doc` | path within the doc set | the "which file" half of provenance |
 | `source_location` | line range or section | **required, never optional** — a citation without it isn't checkable |
 | `embedding` | the vector | absent until the embedder runs |
@@ -84,21 +91,25 @@ author's.
 
 ## Storage
 
-Three stores, **one source of truth**. None of them holds the documents: the markdown lives on
-disk in the cloned repos at a pinned commit. What's stored is derived — chunks, vectors, postings
-— plus the bookkeeping that makes re-ingestion incremental.
+**One SQLite file, three roles.** None of them holds the documents: the markdown lives on disk in
+the cloned repos at a pinned commit. What's stored is derived — chunks, vectors, postings — plus
+the bookkeeping that makes re-ingestion incremental. See [ADR-0005](decisions/0005-one-sqlite-file.md).
 
-| Store | Holds | Backed by | Why it exists |
+| Role | Holds | Backed by | Why it exists |
 |---|---|---|---|
-| **Chunk Store** | chunk text + provenance, and the file manifest | SQLite — one file | the single source of truth every index is derived from |
-| **Vector Store** | vectors keyed by `chunk_id` | Chroma | approximate nearest-neighbour search |
-| **Keyword Index** (Phase 3) | the same chunks, tokenized | SQLite **FTS5**, same file | term search with a real `bm25()` ranking |
+| **Chunk Store** | chunk text + provenance, and the file manifest | `chunks` + `files` tables | the single source of truth every index is derived from |
+| **Vector Store** | vectors keyed by `chunk_id` | `vec_chunks` — `sqlite-vec` `vec0` virtual table | nearest-neighbour search |
+| **Keyword Index** (Phase 3) | the same chunks, tokenized | `fts_chunks` — FTS5 with `bm25()` | term search with real BM25 ranking |
+
+All three live in **`data/infrachat.db`**. Because they share a connection, a vector search can
+`JOIN` relational columns in one query rather than round-tripping through Python — which is what
+makes per-source filtering and provenance hydration cheap.
 
 ### The two tables
 
 | Table | One row per | Carries |
 |---|---|---|
-| `chunks` | chunk | `id`, `text`, `source`, `source_doc`, `source_location`, `file_id` |
+| `chunks` | chunk | `id` (TEXT, e.g. `kubernetes:architecture/cgroups.md#2`), `text`, `source`, `source_doc`, `source_location`, `file_id` |
 | `files` | ingested file | `path`, `source`, `content_hash`, `ingested_at`, `chunk_count` |
 
 ### Why the manifest (F5)
@@ -117,9 +128,9 @@ rebuilt from the chunk store without re-walking the corpus.
 
 ### Data directory & packaging
 
-Everything lives under one data directory (`data_dir`, default `./data`): `infrachat.db` plus the
-Chroma directory. That directory is **a single Docker volume** — one mount, one thing to back up,
-one thing to delete when starting clean.
+The data directory (`data_dir`, default `./data`) contains exactly one file, `infrachat.db`, and
+is mounted as **a single Docker volume** — one mount, one thing to back up, one thing to delete
+when starting clean.
 
 ⚠️ **The public demo does not mount a volume.** Free-tier hosted Spaces have an ephemeral
 filesystem, so the deployed image ships a **pre-built, read-only index** and `infrachat ingest`
@@ -140,11 +151,12 @@ system run the same code path.
 | Seam | Responsibility | Real from | Baseline default |
 |---|---|---|---|
 | `ChunkStore` | persist chunks + the file manifest; hydrate chunks by id | Phase 1 | SQLite |
-| `Embedder` | text → vectors. **The same instance embeds chunks and queries** | Phase 1 | local CPU model |
-| `VectorStore` | persist chunks + vectors; similarity search for `k` | Phase 1 | Chroma |
+| `Cleaner` | strip a source's markup before chunking — the **per-source format seam** ([ADR-0006](decisions/0006-pluggable-sources.md)) | Phase 1 | `plain` (strip nothing) |
+| `Embedder` | text → vectors, via **`passage_embed` and `query_embed`** — the default model is asymmetric, so a query is embedded differently from a passage | Phase 1 | `fastembed`, `bge-small-en-v1.5` |
+| `VectorStore` | persist vectors keyed by `chunk_id`; similarity search for `k` | Phase 1 | `sqlite-vec`, same file |
 | `Retriever` | question → ranked candidates | Phase 1 | dense-only |
 | `Reranker` | reorder candidates by true relevance, keep top `k` | Phase 2 | **pass-through** |
-| `KeywordIndex` | persist tokenized chunks; term search for `k` | Phase 3 | absent |
+| `KeywordIndex` | persist tokenized chunks; term search for `k` | Phase 3 | FTS5, same file |
 | `Fusion` | merge two ranked lists into one ranking | Phase 3 | absent |
 | `QueryRewriter` | question → rewritten question | Phase 4 | **identity** |
 | `LLMClient` | (system prompt, user prompt) → completion | Phase 1 | OpenAI-compatible |
@@ -210,57 +222,86 @@ passed in tagged with its `[source:location]`, so the tags the model echoes are 
 
 ## Configuration model (F15)
 
-Components are toggled here — **the config is the experiment.** Each eval run pins one config.
+**Two files.** The live copies are `sources.yaml` and `config.yaml` in the repo root; the shapes
+below are the contract, and those files are the truth.
+
+### `sources.yaml` — *what* gets ingested
+
+Stable, and shared by every run. Separate from `config.yaml` because several experiment configs
+use one corpus definition; duplicating it per config would silently break comparability.
+
+```yaml
+defaults:                          # merged under every source; a source may override any key
+  exclude_globs: ["**/node_modules/**", "**/.git/**", "**/_print/**"]
+  secret_patterns: [".env", "credentials*", "*.pem", "*.key", "id_rsa*"]
+  max_file_bytes: 100000
+
+sources:
+  - name: kubernetes               # machine name — appears in chunk ids and citations
+    label: "Kubernetes"            # human name — appears in the refusal message
+    repo: "https://github.com/kubernetes/website"
+    path: "corpus/kubernetes-website/content/en/docs/concepts"
+    include_ext: [".md"]
+    clean: hugo                    # plain | hugo | sphinx-rst
+```
+
+The **refusal message is generated from the `label` fields**, so a new source updates it for free.
+`clean` selects the markup stripper — the per-source format seam.
+
+### `config.yaml` — *how this run behaves*
+
+One config = one eval run. Everything past Phase 1 is commented out; because every optional
+component defaults to its null object, **a commented-out block and `enabled: false` mean exactly
+the same thing.**
 
 ```yaml
 infrachat:
+  data_dir: "./data"                 # holds infrachat.db — one Docker volume
   corpus:
-    sources:
-      - name: kubernetes
-        path: "./corpus/kubernetes-website/content/en/docs/concepts"
-      - name: docker
-        path: "./corpus/docker-docs/content"
-    include_ext: [".md", ".mdx"]
-    exclude_globs: ["**/node_modules/**", "**/.git/**", "**/*.png", "**/*.svg", "**/_*"]
-    secret_patterns: [".env", "*secret*", "*_key*", "credentials*"]   # never embed
-    max_file_bytes: 100000
-    strip_frontmatter: true
+    sources_file: "sources.yaml"
   chunk:
     size: 800
     overlap: 100
-  data_dir: "./data"                   # infrachat.db + chroma/ — mounted as one Docker volume
-  embedder: local                      # local | api
-  chunk_store: sqlite                  # sqlite | postgres (see ADR-0004)
-  store: chroma                        # chroma | pgvector
+  embedder:
+    model: "BAAI/bge-small-en-v1.5"  # 384-dim, ONNX via fastembed, no torch
   retrieval:
-    retrieve_n: 20                     # candidates fetched before rerank
-    k: 5                               # final chunks sent to the LLM
-    floor: 0.35                        # below this top-1 score => refuse (F8)
-    hybrid:                            # F13 — Phase 3
-      enabled: false                   # false = dense-only baseline
-      keyword_index: bm25
-      fusion: rrf                      # reciprocal rank fusion
-  rerank:                              # F12 — Phase 2
-    enabled: false                     # false = pass-through baseline
-    model: "<cross-encoder-model>"
-  rewrite:                             # F14 — Phase 4
-    enabled: false                     # false = identity baseline
-    model: "<small-cheap-model>"
-  llm:                                 # the generator
-    client: openai_compat              # openai_compat | local
-    base_url: "https://api.<provider>.com/v1"
-    model: "<cheap-or-free-model>"
-    api_key_env: "INFRACHAT_LLM_API_KEY"   # env var NAME, not the key
-    max_context_chunks: 5
+    retrieve_n: 20                   # candidates fetched (only matters once rerank is on)
+    k: 5                             # final chunks sent to the LLM
+    floor: 0.55                      # below this top-1 score => refuse (F8)
   eval:
     question_set: "eval/questions.yaml"
-    results_dir: "eval/runs"           # <run_label>.jsonl, one row per question
-    run_label: "baseline"              # names this config's results for comparison (F11)
+    results_dir: "eval/runs"
+    run_label: "baseline"
+
+  # llm:                             # needed from `ask` onward; `ingest` runs without it
+  #   base_url: "https://api.groq.com/openai/v1"
+  #   model: "llama-3.3-70b-versatile"
+  #   api_key_env: "INFRACHAT_LLM_API_KEY"   # the env var NAME, never the key
+  #   max_context_chunks: 5
+  # rerank:   { enabled: true, model: "Xenova/ms-marco-MiniLM-L-6-v2" }   # Phase 2
+  # retrieval: { hybrid: { enabled: true, fusion: rrf } }                 # Phase 3 — needs re-ingest
+  # rewrite:  { enabled: true, model: "llama-3.1-8b-instant" }            # Phase 4
 ```
 
-**Held fixed across all phases** so eval runs stay comparable: `chunk.*`, `embedder`, and the
-corpus commit. Changing any of them invalidates comparison with earlier runs — see
-[EVAL.md](EVAL.md).
+### Which keys have defaults
+
+> **Anything that changes the numbers is required in YAML.
+> Anything that turns a component off defaults to off.**
+
+| Required — no default | Defaulted |
+|---|---|
+| `chunk.size`, `chunk.overlap` | `rerank`, `rewrite`, `hybrid` — the null objects |
+| `embedder.model` | `llm` — absent means `ask` is unavailable, not an error |
+| `retrieval.retrieve_n`, `k`, `floor` | `data_dir`, `sources_file`, `results_dir`, `question_set` |
+| `eval.run_label` | |
+
+A defaulted `chunk.size` or `floor` could differ from the value a recorded run actually used,
+invalidating the comparison with no error. `eval.run_label` is required for a blunter reason: a
+default would let a stray run overwrite the baseline results file.
+
+**`floor` is embedder-specific.** 0.55 is a starting point measured against `bge-small-en-v1.5`,
+where 0.35 refuses nothing — an unrelated question ("how do I bake sourdough bread?") scores 0.409
+against these docs. Re-tune it on the real corpus, and again whenever the embedder changes.
 
 ## CLI / launch model
 
@@ -285,7 +326,8 @@ enabling the reranker or rewriter does not.
 
 - **Live fetching / scraping** of the docs — v1 clones them; clone-and-refresh, then live fetch,
   is a noted later extension, deferred so the RAG core reaches "done" first.
-- **Doc sets beyond Kubernetes + Docker** — fixed for v1.
+- **Doc sets whose markup no `Cleaner` handles** — adding a source is a `sources.yaml` entry, but a
+  new *format* needs a Cleaner implementation. Generated HTML and PDFs are out of scope.
 - **Agentic multi-hop retrieval** — one retrieve (+optional rerank) and one generator call per query.
 - **Fine-tuning / distillation** — this is *retrieval*, not training. Deliberately, and cheaply.
 - **Multi-user / auth** — single-user local tool.

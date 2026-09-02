@@ -11,8 +11,6 @@ against the same eval set.
 Two rules the whole system is built around: **an answer without a citation is a bug**, and
 **every component must earn its place with a number.**
 
-[![Final architecture](docs/images/final-architecture.png)](docs/images/final-architecture.png)
-
 | | Doc |
 |---|---|
 | **What** must be true | [docs/SPEC.md](docs/SPEC.md) |
@@ -20,6 +18,7 @@ Two rules the whole system is built around: **an answer without a citation is a 
 | **In what order** | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | **How it's measured** | [docs/EVAL.md](docs/EVAL.md) |
 | **Why** (the ADR trail) | [docs/decisions/](docs/decisions/) |
+| **Diagrams** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#how-the-system-grows) — baseline through final |
 
-**Start here → [docs/README.md](docs/README.md)** · Status: **Phase 0** — docs and diagrams in place, no code yet ([ROADMAP](docs/ROADMAP.md#current-status))
+**Start here → [docs/README.md](docs/README.md)** · Status: **Phase 1 in progress** — ingestion path being built ([ROADMAP](docs/ROADMAP.md#current-status))
     

@@ -1,0 +1,103 @@
+@startuml query-sequence
+' InfraChat — the ONLINE path, in order.
+' Why a sequence diagram: the two refusal gates are BRANCHES, and a component diagram
+' can only draw them as arrows. Here you can see where a query stops.
+!include _style.inc
+
+title InfraChat — Query (online)\n<size:12>infrachat ask · one request · read-only · two places it can refuse</size>
+
+actor User
+participant "pipeline" as P
+participant "QueryRewriter" as QR
+participant "Retriever" as R
+participant "Embedder" as E
+database "infrachat.db" as DB
+participant "Reranker" as RR
+participant "Grounding Gate" as G
+participant "LLM — generator" as LLM
+participant "Citation Check" as CC
+
+User -> P : question
+activate P
+
+group#LightGrey Phase 4 — rewrite enabled (identity in baseline)
+  P -> QR : rewrite(query)
+  QR --> P : expanded query
+end
+
+== Retrieval ==
+
+P -> R : retrieve(query, retrieve_n=20)
+activate R
+R -> E : query_embed(query)
+note right of E
+  ""query_embed"", not ""passage_embed"" —
+  bge is asymmetric, and using the wrong
+  one degrades recall silently.
+end note
+E --> R : query vector
+R -> DB : KNN over vec_chunks
+DB --> R : top-20 chunk_ids + scores
+
+group#LightGrey Phase 3 — hybrid enabled
+  R -> DB : bm25() over fts_chunks
+  DB --> R : top-20 chunk_ids + scores
+  R -> R : reciprocal rank fusion\n(rank-based — no shared scale needed)
+end
+
+R -> DB : hydrate chunk_ids
+DB --> R : text + provenance
+R --> P : top-20 Retrieved
+deactivate R
+
+group#LightGrey Phase 2 — rerank enabled (pass-through in baseline)
+  P -> RR : rerank(query, hits, top_k=5)
+  RR --> P : reordered top-5
+end
+
+== The gate — where a query can stop ==
+
+P -> G : hits, floor=0.55
+activate G
+alt top-1 score < floor
+  G --> User : **REFUSE** — "Not found in the Kubernetes or Docker docs."
+  note right of G #FADBD8
+    **F8.** Model-free and cheap: the LLM is
+    never called, so a hopeless query costs
+    nothing. Measured: floor 0.35 refuses
+    nothing with bge-small.
+  end note
+else above floor
+  G --> P : hits pass
+  deactivate G
+
+  P -> LLM : grounded prompt\n(excerpts only · no outside knowledge · emit NOT_IN_DOCS if insufficient)
+  activate LLM
+  LLM --> P : completion
+  deactivate LLM
+
+  P -> CC : parse [source:location] tags
+  activate CC
+  alt NOT_IN_DOCS, or no tag matches a retrieved chunk
+    CC --> User : **REFUSE** — "Insufficient grounding to answer."
+    note right of CC #FADBD8
+      **F9.** Catches what similarity cannot see:
+      chunks that clear the floor but do not
+      answer the question. The tag-matching half
+      does not depend on the model obeying an
+      instruction.
+    end note
+  else every claim is cited
+    CC --> User : answer + citations
+  end
+  deactivate CC
+end
+deactivate P
+
+note across
+  **The gates never move.** Phases 2–4 change only what //reaches// the gate — the grey
+  groups above. Both refusal paths are Phase 1 code that every later phase runs unchanged.
+  That invariant is what makes the A/B comparisons honest. See ADR-0001.
+end note
+
+@enduml

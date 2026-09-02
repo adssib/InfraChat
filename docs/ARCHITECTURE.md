@@ -58,7 +58,7 @@ rather than duplicated components:
   vectors aren't comparable.
 - **The `Chunk Store`.** Vector search returns `chunk_id` + score; the online path hydrates text
   and provenance from the same store the offline path wrote. Chunk text exists in exactly one
-  place ([ADR-0004](decisions/0004-sqlite-chunk-store.md)).
+  place ([ADR-0005](decisions/0005-one-sqlite-file.md)).
 
 ## Component catalogue
 
@@ -73,10 +73,11 @@ names here match the diagrams exactly.**
 | **Corpus Loader** | Walks the trees, yields candidate files | F1 | 1 |
 | **Filter** | Drops secrets, binaries, oversized files — *before* embedding | F2 | 1 |
 | **Chunker** | Splits into overlapping chunks, strips frontmatter, attaches provenance | F3 · `Chunk` | 1 |
-| **Chunk Store** «seam» | Holds chunk text + provenance and the file manifest — **the single source of truth** | F5 · `ChunkStore` | 1 |
+| **Chunk Store** «seam» | Chunk text + provenance and the file manifest — **the single source of truth** (`chunks`, `files`) | F5 · `ChunkStore` | 1 |
+| **Cleaner** «seam» | Strips a source's markup before chunking — the per-source format seam | [ADR-0006](decisions/0006-pluggable-sources.md) | 1 |
 | **Embedder** «seam» | Chunk text → vectors (local CPU model by default) | F4 · `Embedder` | 1 |
-| **Vector Store** «seam» | Vectors keyed by `chunk_id`; answers similarity search | F5 · `VectorStore` | 1 |
-| **Keyword Index (BM25)** «seam» | The *same* chunks tokenized — SQLite FTS5, real `bm25()` | F13 · `KeywordIndex` | 3 |
+| **Vector Store** «seam» | Vectors keyed by `chunk_id` (`vec_chunks`, sqlite-vec — same file) | F5 · `VectorStore` | 1 |
+| **Keyword Index (BM25)** «seam» | The *same* chunks tokenized (`fts_chunks`, FTS5 — same file), real `bm25()` | F13 · `KeywordIndex` | 3 |
 
 ### Online — query
 
@@ -177,7 +178,7 @@ exact tokens, so this is the phase where the corpus itself argues for hybrid.
 
 **What it costs:** a second index to build. Note what it *doesn't* cost: both indexes are derived
 from the chunk store, so they cannot drift, and either can be rebuilt without re-walking the
-corpus. That's the payoff for [ADR-0004](decisions/0004-sqlite-chunk-store.md) landing before
+corpus. That's the payoff for [ADR-0005](decisions/0005-one-sqlite-file.md) landing before
 this phase rather than after it.
 
 ### Phase 4 — + Query Rewriter
@@ -204,24 +205,29 @@ properties fall out of that, and they're the reason the phased plan works at all
 
 1. **Adding a component is a config change**, not a refactor.
 2. **Baseline and enhanced run the same code path**, so an A/B changes exactly one variable.
-3. **Implementations are replaceable** — Chroma → pgvector, local embeddings → an API, a hosted
+3. **Implementations are replaceable** — SQLite → Postgres/pgvector, local embeddings → an API, a hosted
    LLM → a local Ollama model.
 
 See [ADR-0002](decisions/0002-null-object-seams.md).
 
 ## Storage & packaging
 
-Three stores, one source of truth — full schema in [SPEC § Storage](SPEC.md#storage):
+**One file, three roles** — full schema in [SPEC § Storage](SPEC.md#storage):
 
 ```
 data/                     ← one Docker volume
-├── infrachat.db          ← SQLite: chunks + files manifest (+ FTS5 index from Phase 3)
-└── chroma/               ← vectors keyed by chunk_id
+└── infrachat.db          ← chunks + files manifest    (relational)
+                             vec_chunks                (sqlite-vec — vectors by chunk_id)
+                             fts_chunks                (FTS5 bm25() — Phase 3)
 ```
 
-The vector store and keyword index are **derived artifacts**. Delete either and it rebuilds from
-`infrachat.db` without touching the corpus; delete the whole volume and a full `ingest` rebuilds
-it from the pinned clone.
+The vector table and keyword index are **derived artifacts** of the `chunks` table. Drop either
+and it rebuilds from the same file without touching the corpus; delete the volume and a full
+`ingest` rebuilds everything from the pinned clone.
+
+Because all three share one connection, a vector search can `JOIN` relational columns in a single
+query — per-source filtering and provenance hydration are SQL, not Python glue
+([ADR-0005](decisions/0005-one-sqlite-file.md)).
 
 | Target | Data | Ingest runs there? |
 |---|---|---|
@@ -231,7 +237,7 @@ it from the pinned clone.
 **Phase 5 may swap the backend, not the design.** Migrating the chunk store and vectors to
 Postgres + pgvector is a deployment variant, taken *after* Phase 1–4 measurements are locked so
 network latency never lands inside the numbers. `chunk_store:` and `store:` exist to make that a
-swap rather than a rewrite ([ADR-0004](decisions/0004-sqlite-chunk-store.md)).
+swap rather than a rewrite ([ADR-0005](decisions/0005-one-sqlite-file.md)).
 
 ## Assumptions & risks (on the record)
 
@@ -247,6 +253,8 @@ swap rather than a rewrite ([ADR-0004](decisions/0004-sqlite-chunk-store.md)).
   `hits[0].score`, so whatever populates that field defines what `floor` means. This is the
   sharpest edge in the whole design: it is the one place where adding a component *can* silently
   change gate behaviour, and it must be re-checked whenever a stage that rewrites scores is enabled.
+- **`sqlite-vec` is pre-1.0 (0.1.9).** The API may shift under us. Accepted knowingly: the
+  `VectorStore` seam means swapping back to a dedicated vector database is one file.
 - **SQLite is a single-writer store.** Irrelevant as designed — ingestion is one batch process
   and the query path is read-only — but it's the constraint that bites first if ingestion is ever
   parallelised.

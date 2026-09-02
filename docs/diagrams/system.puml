@@ -1,0 +1,98 @@
+@startuml system
+' InfraChat — the whole system, one picture.
+' This diagram is about SHAPE: what exists, where it lives, which phase introduced it.
+' The ORDER of operations lives in ingest-sequence.puml and query-sequence.puml, so this
+' one deliberately draws the minimum edges needed to show structure.
+!include _style.inc
+skinparam linetype polyline
+skinparam nodesep 25
+skinparam ranksep 45
+
+title InfraChat — System\n<size:12>offline ingestion ↓ one SQLite file ↓ online query · colour = phase introduced</size>
+
+package "① OFFLINE — ingestion (infrachat ingest)" as OFFLINE {
+  folder "Cloned corpus\npinned commit" as Corpus #EEF2F7
+  component "Corpus Loader" as Loader #EEF2F7
+  component "Filter" as Filter #EEF2F7
+  component "Cleaner\nplain · hugo · sphinx-rst" as Cleaner #EEF2F7
+  component "Chunker" as Chunker #EEF2F7
+
+  Corpus  --> Loader  : markdown files
+  Loader  --> Filter  : candidate files
+  Filter  --> Cleaner : allowed docs
+  Cleaner --> Chunker : markup stripped
+}
+
+package "② data/infrachat.db — one file, one Docker volume" as STORE {
+  component "chunks + files\ntext · provenance · manifest" as ChunkStore #EEF2F7
+  component "Embedder\npassage_embed / query_embed" as Embedder #EEF2F7
+  component "vec_chunks\nsqlite-vec — KNN" as VectorStore #EEF2F7
+  component "fts_chunks\nFTS5 — bm25()" as KeywordIndex #C8E6C9
+
+  ChunkStore --> Embedder     : chunk text
+  Embedder   --> VectorStore  : vectors by chunk_id
+  ChunkStore --> KeywordIndex : same chunks, tokenized
+}
+
+package "③ ONLINE — query (infrachat ask / serve)" as ONLINE {
+  component "Query" as Query #EEF2F7
+  component "Query Rewriter" as Rewriter #D1C4E9
+  component "LLM — rewriter" as LLMRewriter #D1C4E9
+  component "Retriever" as Retriever #EEF2F7
+  component "Fusion — RRF" as Fusion #C8E6C9
+  component "Reranker\ncross-encoder" as Reranker #FFE0B2
+  component "Grounding Gate" as Gate #EEF2F7
+  component "REFUSE — below floor" as RefuseFloor #F5B7B1
+  component "Prompt Builder" as Prompt #EEF2F7
+  component "LLM — generator" as LLM #EEF2F7
+  component "Citation Check" as CiteCheck #EEF2F7
+  component "Answer + citations" as Answer #A9DFBF
+  component "REFUSE — not grounded" as RefuseNotGrounded #F5B7B1
+
+  Query     --> Rewriter    : raw question
+  Rewriter  ..> LLMRewriter
+  Rewriter  --> Retriever   : rewritten query
+  Retriever --> Fusion      : ranked candidates
+  Fusion    --> Reranker    : fused top-20
+  Reranker  --> Gate        : reranked top-5
+  Gate      --> RefuseFloor : top-1 < floor (F8)
+  Gate      --> Prompt      : above floor
+  Prompt    --> LLM         : grounded prompt
+  LLM       --> CiteCheck   : completion
+  CiteCheck --> Answer      : text + [source:location]
+  CiteCheck --> RefuseNotGrounded : NOT_IN_DOCS / uncited (F9)
+}
+
+package "④ CROSS-CUTTING" as XCUT {
+  component "Eval Harness" as Eval #D7BDE2
+  file "eval/runs/<label>.jsonl" as EvalRuns #D7BDE2
+  Eval --> EvalRuns : one row per question
+}
+
+' ---- the only edges that cross a package boundary ----
+Chunker      --> ChunkStore : chunks + provenance
+Retriever    ..> STORE      : query vector · terms · chunk_ids
+VectorStore  --> Retriever  : dense top-20 + hydrated chunks
+KeywordIndex --> Retriever  : keyword top-20
+Eval         ..> Query      : fixed question set
+Answer       ..> Eval       : grounding · citations · refusals
+
+note bottom of XCUT #FFF9E3
+  **sources.yaml** declares WHAT is ingested — adding a doc set is an entry there.
+  **config.yaml** toggles every optional seam and tunes floor · k · retrieve_n.
+  Both are inputs to every box above; edges omitted so the data path stays readable.
+end note
+
+legend right
+  |<#EEF2F7>   | **Phase 1** — baseline |
+  |<#FFE0B2>   | **Phase 2** — reranker |
+  |<#C8E6C9>   | **Phase 3** — hybrid (BM25 + RRF) |
+  |<#D1C4E9>   | **Phase 4** — query rewriter |
+  |<#F5B7B1>   | refusal (Phase 1) |
+  |<#A9DFBF>   | answer to the user |
+  |<#D7BDE2>   | eval harness |
+  | —▶ | data through the pipeline |
+  | ┄▶ | lookup / instrumentation |
+endlegend
+
+@enduml

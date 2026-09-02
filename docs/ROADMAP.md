@@ -81,18 +81,29 @@ Each component phase follows the same loop:
 
 ## Current status
 
-- **Phase 0 — docs and diagrams in place; no code yet.**
-  - ✅ [SPEC](SPEC.md) (contracts + config), [ARCHITECTURE](ARCHITECTURE.md) (components + risks),
-    [EVAL](EVAL.md) (question set + metrics).
-  - ✅ Five [PlantUML diagrams](diagrams/) — baseline through final, rendered to [images/](images/).
-  - ✅ ADRs [0001](decisions/0001-refuse-over-fabricate.md),
-    [0002](decisions/0002-null-object-seams.md),
-    [0003](decisions/0003-eval-harness-is-phase-1.md). Later decisions get an ADR when the phase
-    lands, not before.
-- **Phase 1 — not started.**
-  - ⏳ Clone the two doc repos; confirm target subfolders + their markdown shape.
-  - ⏳ Corpus filter (F2) — implement first; excluding secrets *before* embedding is the hard rule.
-  - ⏳ Frontmatter-stripping chunker — the docs carry YAML frontmatter + template shortcodes.
-  - ⏳ Chunk store (SQLite): `chunks` + `files` manifest — the source of truth both indexes derive from.
-  - ⏳ Local embedder + vector store behind the `Embedder` / `VectorStore` seams.
-  - ⏳ Eval harness skeleton + first fixed question set (the spine).
+**Phase 1 — in progress.** The offline path is being built module by module; nothing is wired
+into a CLI yet.
+
+Done:
+
+- ✅ Docs: [SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md), [EVAL](EVAL.md), five
+  [diagrams](diagrams/), ADRs [0001](decisions/0001-refuse-over-fabricate.md)–[0006](decisions/0006-pluggable-sources.md).
+- ✅ **Corpus cloned** — sparse checkout of the two configured subfolders, 13MB, 307 files.
+- ✅ `models.py` — Chunk / Retrieved / Citation / Answer. F9 is enforced in the type: an uncited
+  grounded answer cannot be constructed.
+- ✅ `config.py` + `config.yaml` + `sources.yaml` — two-file config, per-source `clean` seam,
+  generated refusal message, later phases commented out.
+- ✅ `ingest/loader.py` — deterministic walk, source-relative paths.
+- ✅ `ingest/filter.py` — F2, every drop carries the rule that caused it.
+
+Next, in order:
+
+- ⏳ `ingest/chunker.py` — frontmatter + Hugo shortcode stripping, overlapping windows.
+- ⏳ `store/chunks.py` — the one SQLite file: `chunks`, `files`, `vec_chunks`.
+- ⏳ `embed.py` — the `Embedder` seam (fastembed, asymmetric query/passage).
+- ⏳ `cli.py` — `ingest` and `ingest --dry-run`, the first runnable command.
+- ⏳ Then the online path: retriever → gate → prompt → LLM → citation check → `ask`.
+- ⏳ Then `serve` (Gradio), the eval harness + question set, Docker, and the Spaces deploy.
+
+Open decisions blocking nothing but worth settling: narrowing `secret_patterns` (today `*secret*`
+excludes the Kubernetes Secrets docs), and whether `_index.md` should be stripped from citation tags.

@@ -1,0 +1,82 @@
+@startuml ingest-sequence
+' InfraChat — the OFFLINE path, in order.
+' The interesting part is not the chain (loader -> filter -> chunk -> embed); it is the
+' manifest branch that makes re-ingestion incremental (F5).
+!include _style.inc
+
+title InfraChat — Ingestion (offline)\n<size:12>infrachat ingest · runs rarely · the only writer</size>
+
+actor Operator
+participant "Loader" as L
+participant "Filter" as F
+participant "Cleaner" as C
+participant "Chunker" as CH
+participant "Embedder" as E
+database "infrachat.db" as DB
+
+Operator -> L : ingest -c config.yaml
+activate L
+
+loop for each source in sources.yaml
+  L -> L : walk source root\n(sorted — stable chunk ids)
+  L -> F : candidate files
+  activate F
+  F -> F : secret patterns → exclude globs\n→ allowed extensions → size cap
+  F --> L : kept files\n(+ dropped, each with the rule that matched)
+  deactivate F
+
+  loop for each kept file
+    L -> DB : SELECT content_hash FROM files WHERE path = ?
+
+    alt hash unchanged
+      DB --> L : same hash
+      note right of L #E8F5E9
+        Skipped. No re-read, no re-chunk,
+        no re-embed — this is what makes
+        a second ingest cheap (F5).
+      end note
+
+    else new or changed
+      DB --> L : different hash / no row
+      L -> DB : DELETE FROM chunks WHERE file_id = ?
+      note right of DB
+        Stale chunks go **before** new ones land,
+        so an edited doc never leaves orphans
+        and a deleted doc leaves nothing.
+      end note
+
+      L -> C : raw file text
+      activate C
+      C --> CH : text with markup stripped\n(per-source ""clean"" strategy)
+      deactivate C
+
+      activate CH
+      CH -> CH : split into overlapping windows\n(chunk.size / chunk.overlap)
+      CH --> L : chunks + provenance\n(source, source_doc, source_location)
+      deactivate CH
+
+      L -> DB : INSERT INTO chunks
+      L -> E : passage_embed(texts)
+      activate E
+      E --> L : vectors (384-dim)
+      deactivate E
+      L -> DB : INSERT INTO vec_chunks (chunk_id, embedding)
+
+      group#LightGrey Phase 3 — hybrid enabled
+        L -> DB : INSERT INTO fts_chunks (FTS5)
+      end
+
+      L -> DB : UPSERT files (path, content_hash, chunk_count)
+    end
+  end
+end
+
+L --> Operator : N files scanned · M kept · K chunks · S skipped unchanged
+deactivate L
+
+note across
+  Everything written here lands in **one file**, ""data/infrachat.db"" — the chunk store,
+  the vectors, and (from Phase 3) the keyword index. See ADR-0005.
+end note
+
+@enduml
