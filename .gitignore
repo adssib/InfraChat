@@ -1,6 +1,11 @@
 # the corpus clones and the built indexes are artifacts, never committed
 corpus/
 data/
+data-wal
+data-shm
+*.db
+*.db-wal
+*.db-shm
 
 # python
 __pycache__/

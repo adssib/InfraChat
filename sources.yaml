@@ -12,7 +12,11 @@ defaults:
     - "**/node_modules/**"
     - "**/.git/**"
     - "**/_print/**"
-  secret_patterns: [".env", "*secret*", "*_key*", "credentials*"]
+  # Target credential FILE FORMS, not any filename containing the word: "*secret*" also
+  # matches the Kubernetes Secrets documentation, which is exactly what we want to index.
+  # Nothing here can match a .md file, so docs are structurally safe.
+  secret_patterns: [".env", ".env.*", "credentials", "credentials.*",
+                    "*.pem", "*.key", "*.pfx", "id_rsa*", ".htpasswd"]
   max_file_bytes: 100000
 
 sources:
