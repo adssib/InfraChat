@@ -37,6 +37,7 @@ package "OFFLINE — ingestion (batch: infrachat ingest)" as OFFLINE {
   component "Corpus Loader" as Loader
   component "Filter" as Filter
   component "Chunker" as Chunker
+  database  "Chunk Store\n(SQLite: chunks + file manifest)" as ChunkStore <<seam>>
   component "Embedder" as Embedder <<seam>>
   database  "Vector Store" as VectorStore <<seam>>
 }
@@ -63,14 +64,16 @@ package "CROSS-CUTTING" as XCUT {
 Corpus      --> Loader      : markdown files\n(k8s + docker trees)
 Loader      --> Filter      : candidate files
 Filter      --> Chunker     : allowed docs\n(secrets / binaries / oversized dropped)
-Chunker     --> Embedder    : chunks + provenance\n(source, source_doc, source_location)
-Embedder    --> VectorStore : chunk vectors
+Chunker     --> ChunkStore  : chunks + provenance\n(source, source_doc, source_location)
+ChunkStore  --> Embedder    : chunk text\n(the single source of truth)
+Embedder    --> VectorStore : vectors keyed by chunk_id
 
 ' ---- online: query data flow (the reranker is spliced into one seam) ----
 Query       --> Retriever   : question
 Retriever   ..> Embedder    : embeds the query\n(same seam as ingestion)
 Retriever   ..> VectorStore : query vector, retrieve_n=20
-VectorStore --> Retriever   : top-20 chunks\n(score, source, location)
+Retriever   ..> ChunkStore  : hydrate chunk_ids\n→ text + provenance
+VectorStore --> Retriever   : top-20 chunk_ids + scores
 Retriever   --> Reranker    : top-20 candidates\n(cheap vector recall)
 Reranker    --> Gate        : reranked top-5\n(k=5, cross-encoder scores)
 Gate        --> RefuseFloor : REFUSAL 1 — top-1 score < floor (F8)

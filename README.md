@@ -22,3 +22,4 @@ Two rules the whole system is built around: **an answer without a citation is a 
 | **Why** (the ADR trail) | [docs/decisions/](docs/decisions/) |
 
 **Start here → [docs/README.md](docs/README.md)** · Status: **Phase 0** — docs and diagrams in place, no code yet ([ROADMAP](docs/ROADMAP.md#current-status))
+    

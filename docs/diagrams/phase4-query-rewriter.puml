@@ -37,9 +37,10 @@ package "OFFLINE — ingestion (batch: infrachat ingest)" as OFFLINE {
   component "Corpus Loader" as Loader
   component "Filter" as Filter
   component "Chunker" as Chunker
+  database  "Chunk Store\n(SQLite: chunks + file manifest)" as ChunkStore <<seam>>
   component "Embedder" as Embedder <<seam>>
   database  "Vector Store" as VectorStore <<seam>>
-  database  "Keyword Index\n(BM25)" as KeywordIndex <<seam>>
+  database  "Keyword Index\n(SQLite FTS5 — BM25)" as KeywordIndex <<seam>>
 }
 
 package "ONLINE — query (per request: infrachat ask)" as ONLINE {
@@ -71,9 +72,10 @@ package "CROSS-CUTTING" as XCUT {
 Corpus      --> Loader       : markdown files\n(k8s + docker trees)
 Loader      --> Filter       : candidate files
 Filter      --> Chunker      : allowed docs\n(secrets / binaries / oversized dropped)
-Chunker     --> Embedder     : chunks + provenance\n(source, source_doc, source_location)
-Embedder    --> VectorStore  : chunk vectors
-Chunker     --> KeywordIndex : the SAME chunks, tokenized\n(BM25 postings)
+Chunker     --> ChunkStore   : chunks + provenance\n(source, source_doc, source_location)
+ChunkStore  --> Embedder     : chunk text\n(the single source of truth)
+Embedder    --> VectorStore  : vectors keyed by chunk_id
+ChunkStore  --> KeywordIndex : the SAME chunks, tokenized\n(FTS5)
 
 ' ---- online: the rewriter is prepended to the query path ----
 Query        --> Rewriter     : raw question\n("how do I make my image smaller?")
@@ -82,7 +84,8 @@ LLMRewriter  --> Rewriter     : rewritten / expanded query\n("multi-stage build,
 Rewriter     --> Retriever    : rewritten query\n(both arms see it)
 Retriever    ..> Embedder     : embeds the rewritten query
 Retriever    ..> VectorStore  : query vector, retrieve_n=20
-VectorStore  --> Retriever    : dense top-20 (ranked)
+Retriever    ..> ChunkStore   : hydrate chunk_ids\n→ text + provenance
+VectorStore  --> Retriever    : dense top-20 chunk_ids (ranked)
 Retriever    ..> KeywordIndex : query terms, retrieve_n=20
 KeywordIndex --> Fusion       : keyword top-20 (ranked)
 Retriever    --> Fusion       : dense top-20 (ranked)

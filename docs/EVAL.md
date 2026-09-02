@@ -93,6 +93,15 @@ numbers by making the gate trigger-happy.
 
 Quality that costs 2× latency is a tradeoff, not a win. Phase 4 is judged on both columns.
 
+## Where results land
+
+Per-question results are written as **flat JSONL** — `eval/runs/<run_label>.jsonl`, one row per
+question, committed to the repo. Deliberately *not* in the database: four runs of ~30 questions
+isn't a database's problem, and a committed results file is readable by anyone reviewing the repo
+([ADR-0004](decisions/0004-sqlite-chunk-store.md)). Each row carries the question id, class,
+retrieved doc ids, whether it was refused, the citations, and latency; each file carries the run's
+corpus commit, embedder, generator model, and date in its first line.
+
 ## The comparison table
 
 Every phase appends one row. This table *is* the Phase 5 write-up:

@@ -47,13 +47,18 @@ InfraChat is two pipelines that meet at the stores:
 |---|---|---|
 | Trigger | `infrachat ingest`, run rarely | one user question, `infrachat ask` / `serve` |
 | Shape | batch, whole corpus | single request, latency-sensitive |
-| Writes | Vector Store, Keyword Index | nothing — read-only |
+| Writes | Chunk Store, Vector Store, Keyword Index | nothing — read-only |
 | Cost driver | embedding the corpus once | LLM calls per query |
 | Fails how | loudly, rerun it | **quietly refusing** rather than guessing |
 
-They share exactly one thing: the **`Embedder` seam**. The same model that embedded the chunks
-must embed the query, or the vectors aren't comparable — which is why the diagrams draw that
-dashed line across the package boundary rather than duplicating the component.
+They share exactly two things, and both are drawn as dashed lines crossing the package boundary
+rather than duplicated components:
+
+- **The `Embedder` seam.** The same model that embedded the chunks must embed the query, or the
+  vectors aren't comparable.
+- **The `Chunk Store`.** Vector search returns `chunk_id` + score; the online path hydrates text
+  and provenance from the same store the offline path wrote. Chunk text exists in exactly one
+  place ([ADR-0004](decisions/0004-sqlite-chunk-store.md)).
 
 ## Component catalogue
 
@@ -68,9 +73,10 @@ names here match the diagrams exactly.**
 | **Corpus Loader** | Walks the trees, yields candidate files | F1 | 1 |
 | **Filter** | Drops secrets, binaries, oversized files — *before* embedding | F2 | 1 |
 | **Chunker** | Splits into overlapping chunks, strips frontmatter, attaches provenance | F3 · `Chunk` | 1 |
+| **Chunk Store** «seam» | Holds chunk text + provenance and the file manifest — **the single source of truth** | F5 · `ChunkStore` | 1 |
 | **Embedder** «seam» | Chunk text → vectors (local CPU model by default) | F4 · `Embedder` | 1 |
-| **Vector Store** «seam» | Persists chunks + vectors, answers similarity search | F5 · `VectorStore` | 1 |
-| **Keyword Index (BM25)** «seam» | Persists the *same* chunks tokenized, answers term search | F13 · `KeywordIndex` | 3 |
+| **Vector Store** «seam» | Vectors keyed by `chunk_id`; answers similarity search | F5 · `VectorStore` | 1 |
+| **Keyword Index (BM25)** «seam» | The *same* chunks tokenized — SQLite FTS5, real `bm25()` | F13 · `KeywordIndex` | 3 |
 
 ### Online — query
 
@@ -79,7 +85,7 @@ names here match the diagrams exactly.**
 | **Query** | The user's raw question | — | 1 |
 | **Query Rewriter** «seam» | Rewrites/expands the question before retrieval | F14 · `QueryRewriter` | 4 |
 | **LLM — rewriter** «seam» | The small/cheap model behind the rewriter | `LLMClient` | 4 |
-| **Dense Retriever** «seam» | Embeds the query, pulls `retrieve_n` candidates by similarity | F6 · `Retriever` | 1 |
+| **Dense Retriever** «seam» | Embeds the query, pulls `retrieve_n` candidate ids, hydrates them from the chunk store | F6 · `Retriever` | 1 |
 | **Fusion (RRF)** | Merges the dense and keyword ranked lists by rank | F13 · `Fusion` | 3 |
 | **Reranker** «seam» | Cross-encoder re-scores candidates jointly, keeps top `k` | F12 · `Reranker` | 2 |
 | **Grounding Gate** | Refuses when top-1 score < `floor` | **F8** | 1 |
@@ -169,7 +175,10 @@ exact tokens, so this is the phase where the corpus itself argues for hybrid.
 **RRF fuses by rank, not by score**, so the two arms never need a shared scale
 (an ADR lands with the Phase 3 numbers).
 
-**What it costs:** a second index to build and keep in sync with the vector store.
+**What it costs:** a second index to build. Note what it *doesn't* cost: both indexes are derived
+from the chunk store, so they cannot drift, and either can be rebuilt without re-walking the
+corpus. That's the payoff for [ADR-0004](decisions/0004-sqlite-chunk-store.md) landing before
+this phase rather than after it.
 
 ### Phase 4 — + Query Rewriter
 
@@ -200,6 +209,30 @@ properties fall out of that, and they're the reason the phased plan works at all
 
 See [ADR-0002](decisions/0002-null-object-seams.md).
 
+## Storage & packaging
+
+Three stores, one source of truth — full schema in [SPEC § Storage](SPEC.md#storage):
+
+```
+data/                     ← one Docker volume
+├── infrachat.db          ← SQLite: chunks + files manifest (+ FTS5 index from Phase 3)
+└── chroma/               ← vectors keyed by chunk_id
+```
+
+The vector store and keyword index are **derived artifacts**. Delete either and it rebuilds from
+`infrachat.db` without touching the corpus; delete the whole volume and a full `ingest` rebuilds
+it from the pinned clone.
+
+| Target | Data | Ingest runs there? |
+|---|---|---|
+| Local / home-lab | `./data` mounted as a volume | yes — this is where indexes are built |
+| Public demo (hosted Spaces) | index **baked read-only into the image** | **no** — free-tier filesystems are ephemeral, so a volume wouldn't survive a restart |
+
+**Phase 5 may swap the backend, not the design.** Migrating the chunk store and vectors to
+Postgres + pgvector is a deployment variant, taken *after* Phase 1–4 measurements are locked so
+network latency never lands inside the numbers. `chunk_store:` and `store:` exist to make that a
+swap rather than a rewrite ([ADR-0004](decisions/0004-sqlite-chunk-store.md)).
+
 ## Assumptions & risks (on the record)
 
 - **The corpus is a pinned snapshot.** No live fetching in v1 — eval runs are only comparable if
@@ -214,6 +247,9 @@ See [ADR-0002](decisions/0002-null-object-seams.md).
   `hits[0].score`, so whatever populates that field defines what `floor` means. This is the
   sharpest edge in the whole design: it is the one place where adding a component *can* silently
   change gate behaviour, and it must be re-checked whenever a stage that rewrites scores is enabled.
+- **SQLite is a single-writer store.** Irrelevant as designed — ingestion is one batch process
+  and the query path is read-only — but it's the constraint that bites first if ingestion is ever
+  parallelised.
 - **One generator call per query.** No agentic multi-hop — cost and latency stay flat and
   predictable, at the cost of questions that genuinely need two retrieval hops.
 - **Single-user, no auth, no rate limiting.** A public Spaces demo is exposed to whoever finds it;

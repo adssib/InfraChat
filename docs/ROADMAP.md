@@ -11,11 +11,11 @@
 
 | # | Phase | Delivers | Measure | Diagram |
 |---|---|---|---|---|
-| **1** | **Baseline RAG** — all systems wired | ingest → filter → chunk → embed → vector store; dense retrieve → grounding gate (floor → refuse) → LLM answer with citations; **eval harness** | **Eval run #1 → baseline numbers** | [P1](images/phase1-baseline.png) |
+| **1** | **Baseline RAG** — all systems wired | ingest → filter → chunk → **chunk store** → embed → vector store; dense retrieve → grounding gate (floor → refuse) → LLM answer with citations; **eval harness** | **Eval run #1 → baseline numbers** | [P1](images/phase1-baseline.png) |
 | **2** | **+ Reranker** | insert a cross-encoder reranker between retrieve and ground (retrieve top-20 → rerank → keep top-5) | Eval run #2 vs. baseline → *did reranking help?* | [P2](images/phase2-reranker.png) |
 | **3** | **+ Hybrid search** | add a BM25 keyword index; fuse dense + keyword (reciprocal rank fusion) before reranking | Eval run #3 vs. Phase 2 → *did hybrid help, esp. on exact-term queries?* | [P3](images/phase3-hybrid.png) |
 | **4** | **+ Query rewriter** | prepend a small/cheap LLM that rewrites/expands the query before retrieval | Eval run #4 vs. Phase 3 → *does rewriting earn its latency?* | [P4](images/phase4-query-rewriter.png) |
-| **5** | **Deep-dive + deploy + write-up** | consolidate all runs into one comparison table; deploy to HF Spaces / home-lab; write the blog/report | The story: baseline → +reranker → +hybrid → +rewriter | [final](images/final-architecture.png) |
+| **5** | **Deep-dive + deploy + write-up** | consolidate all runs into one comparison table; deploy to HF Spaces / home-lab; **optional Postgres + pgvector migration** ([ADR-0004](decisions/0004-sqlite-chunk-store.md)); write the blog/report | The story: baseline → +reranker → +hybrid → +rewriter | [final](images/final-architecture.png) |
 
 Each phase's diagram shows what it adds, in amber, on top of everything before it — the set reads
 as one system growing. Sources: [diagrams/](diagrams/); walkthrough:
@@ -75,6 +75,9 @@ Each component phase follows the same loop:
   API fields — the queries dense embeddings often miss. Design a few such questions into the eval set.
 - **Fetching the docs live is a later extension**, outside this roadmap. It earns a phase only once
   Phases 1–5 hit "done."
+- **Storage stays local through Phase 4.** The stores are files behind one Docker volume so no
+  network hop lands inside the p95 numbers Phase 4 is judged on. Postgres/pgvector is a Phase 5
+  deployment variant, taken after the measurements are locked.
 
 ## Current status
 
@@ -90,5 +93,6 @@ Each component phase follows the same loop:
   - ⏳ Clone the two doc repos; confirm target subfolders + their markdown shape.
   - ⏳ Corpus filter (F2) — implement first; excluding secrets *before* embedding is the hard rule.
   - ⏳ Frontmatter-stripping chunker — the docs carry YAML frontmatter + template shortcodes.
+  - ⏳ Chunk store (SQLite): `chunks` + `files` manifest — the source of truth both indexes derive from.
   - ⏳ Local embedder + vector store behind the `Embedder` / `VectorStore` seams.
   - ⏳ Eval harness skeleton + first fixed question set (the spine).

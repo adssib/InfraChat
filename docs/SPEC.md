@@ -34,7 +34,7 @@ each measured against that baseline.
 | **F2** | **Filter** — include only allowed doc types; hard-exclude secrets, binaries, and oversized files *before* embedding. |
 | **F3** | **Chunk** — split docs into overlapping chunks, each carrying source, doc path, and location; strip markdown frontmatter and template cruft. |
 | **F4** | **Embed** — every chunk gets a vector embedding via a pluggable embedder (local model default, $0). |
-| **F5** | **Store** — chunks + embeddings persist in a pluggable vector store; ingestion is repeatable and incremental per source. |
+| **F5** | **Store** — chunk text + provenance persist in the **chunk store** (the source of truth); embeddings in a pluggable vector store. Re-ingestion is **incremental**: a file whose content hash is unchanged is skipped; a changed file has its chunks deleted and rebuilt. |
 | **F6** | **Retrieve (dense)** — for a query, return the top-k chunks by vector similarity, each with score, source, and location. |
 | **F7** | **Grounded answer** — the LLM answers *using only retrieved chunks*; every answer carries the citations it used. |
 | **F8** | **Refuse below floor** — if top-1 similarity is below a configured floor, return an explicit *"not in the docs"* refusal instead of answering. |
@@ -82,6 +82,55 @@ author's.
 ⚠️ `score` is the field the grounding gate reads. Whatever stage last wrote it defines what
 `floor` means — see [ARCHITECTURE.md § Assumptions](ARCHITECTURE.md#assumptions--risks-on-the-record).
 
+## Storage
+
+Three stores, **one source of truth**. None of them holds the documents: the markdown lives on
+disk in the cloned repos at a pinned commit. What's stored is derived — chunks, vectors, postings
+— plus the bookkeeping that makes re-ingestion incremental.
+
+| Store | Holds | Backed by | Why it exists |
+|---|---|---|---|
+| **Chunk Store** | chunk text + provenance, and the file manifest | SQLite — one file | the single source of truth every index is derived from |
+| **Vector Store** | vectors keyed by `chunk_id` | Chroma | approximate nearest-neighbour search |
+| **Keyword Index** (Phase 3) | the same chunks, tokenized | SQLite **FTS5**, same file | term search with a real `bm25()` ranking |
+
+### The two tables
+
+| Table | One row per | Carries |
+|---|---|---|
+| `chunks` | chunk | `id`, `text`, `source`, `source_doc`, `source_location`, `file_id` |
+| `files` | ingested file | `path`, `source`, `content_hash`, `ingested_at`, `chunk_count` |
+
+### Why the manifest (F5)
+
+`files` is what makes "incremental" implementable. On re-ingest, each file's content hash is
+compared: **unchanged → skip**; **changed → delete its chunks by `file_id`, re-chunk, re-embed,
+re-index**. Without it, a second ingest either duplicates every chunk or forces a full rebuild —
+and there is no way to remove the chunks of a document that upstream deleted.
+
+### Read path
+
+Vector search returns **`chunk_id` + score**; text and provenance are hydrated from the chunk
+store. **Chunk text is stored exactly once.** The cost is one extra local lookup per query; the
+benefit is that the vector store and keyword index are both *derived artifacts* that can be
+rebuilt from the chunk store without re-walking the corpus.
+
+### Data directory & packaging
+
+Everything lives under one data directory (`data_dir`, default `./data`): `infrachat.db` plus the
+Chroma directory. That directory is **a single Docker volume** — one mount, one thing to back up,
+one thing to delete when starting clean.
+
+⚠️ **The public demo does not mount a volume.** Free-tier hosted Spaces have an ephemeral
+filesystem, so the deployed image ships a **pre-built, read-only index** and `infrachat ingest`
+never runs inside it. Ingestion is a local/home-lab job whose output is an artifact.
+
+### Eval results are not in the database
+
+Per-question eval results are **flat JSONL** — `eval/runs/<run_label>.jsonl`, one row per
+question, committed to the repo. Four runs of ~30 questions is not a database's problem, and a
+committed results file is readable by anyone reviewing the repo. See [EVAL.md](EVAL.md).
+
 ## The seams (pluggable interfaces)
 
 The pipeline depends **only** on these. Every optional component slots into an existing seam
@@ -90,6 +139,7 @@ system run the same code path.
 
 | Seam | Responsibility | Real from | Baseline default |
 |---|---|---|---|
+| `ChunkStore` | persist chunks + the file manifest; hydrate chunks by id | Phase 1 | SQLite |
 | `Embedder` | text → vectors. **The same instance embeds chunks and queries** | Phase 1 | local CPU model |
 | `VectorStore` | persist chunks + vectors; similarity search for `k` | Phase 1 | Chroma |
 | `Retriever` | question → ranked candidates | Phase 1 | dense-only |
@@ -178,7 +228,9 @@ infrachat:
   chunk:
     size: 800
     overlap: 100
+  data_dir: "./data"                   # infrachat.db + chroma/ — mounted as one Docker volume
   embedder: local                      # local | api
+  chunk_store: sqlite                  # sqlite | postgres (see ADR-0004)
   store: chroma                        # chroma | pgvector
   retrieval:
     retrieve_n: 20                     # candidates fetched before rerank
@@ -202,6 +254,7 @@ infrachat:
     max_context_chunks: 5
   eval:
     question_set: "eval/questions.yaml"
+    results_dir: "eval/runs"           # <run_label>.jsonl, one row per question
     run_label: "baseline"              # names this config's results for comparison (F11)
 ```
 
@@ -236,6 +289,9 @@ enabling the reranker or rewriter does not.
 - **Agentic multi-hop retrieval** — one retrieve (+optional rerank) and one generator call per query.
 - **Fine-tuning / distillation** — this is *retrieval*, not training. Deliberately, and cheaply.
 - **Multi-user / auth** — single-user local tool.
+- **A hosted database during Phases 1–4** — the stores are local files behind a Docker volume, so
+  latency measurements stay clean. Migrating to Postgres/pgvector is a **Phase 5 deployment**
+  concern ([ADR-0004](decisions/0004-sqlite-chunk-store.md)).
 
 ## Ethics & safety (non-negotiable)
 

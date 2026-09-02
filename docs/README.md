@@ -20,8 +20,8 @@ the rest of the system is arranged around. If you only look at one picture, look
 
 ## The one-paragraph version
 
-InfraChat ingests two markdown documentation trees **offline** (load → filter → chunk → embed →
-index), and answers questions **online** (rewrite → retrieve → fuse → rerank → **grounding gate**
+InfraChat ingests two markdown documentation trees **offline** (load → filter → chunk → store →
+embed → index), and answers questions **online** (rewrite → retrieve → fuse → rerank → **grounding gate**
 → generate → citation check). The gate is the point of the project: if retrieval confidence is
 below a floor, or the model cannot ground an answer in the retrieved excerpts, InfraChat
 **refuses** instead of guessing. Every optional component sits behind an interface and defaults
