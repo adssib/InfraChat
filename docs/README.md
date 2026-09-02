@@ -9,14 +9,14 @@ Start here. The docs are split by **purpose**, so a reviewer can find what they 
 | [ROADMAP.md](ROADMAP.md) | **In what order** — the 5-phase build plan and the definition of done. |
 | [EVAL.md](EVAL.md) | **How it's measured** — the question set, the metric definitions, and the comparison table every phase fills in. |
 | [decisions/](decisions/) | **Why** — Architecture Decision Records: every tradeoff, on the record. |
-| [diagrams/](diagrams/) | The PlantUML sources for every diagram (rendered into [images/](images/)). |
+| [diagrams/](diagrams/) | PlantUML sources — one system diagram plus two sequence diagrams (rendered into [images/](images/)). |
 
 ## Reading path
 
 **SPEC → ARCHITECTURE → skim the ADRs.** If you only read one thing, read
 [ADR-0001: refuse over fabricate](decisions/0001-refuse-over-fabricate.md) — it is the decision
 the rest of the system is arranged around. If you only look at one picture, look at
-[the final architecture](images/final-architecture.png).
+[the system diagram](images/system.png) — then the two sequence diagrams for how it behaves.
 
 ## The one-paragraph version
 

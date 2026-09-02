@@ -85,8 +85,10 @@ integration tests, no coverage target. The **eval harness is the real quality ga
   silently drift.
 - **Every non-trivial decision gets an ADR** — context → options → tradeoff → consequences.
   When a decision changes, write a *new* ADR and mark the old one **Superseded**; never rewrite it.
-- **Diagrams live in `docs/diagrams/*.puml`**, rendered to `docs/images/`. Change one, re-render,
-  and apply the same change to every later phase's diagram.
+- **Diagrams live in `docs/diagrams/*.puml`**, rendered to `docs/images/` — three of them:
+  `system` (what exists), `ingest-sequence` and `query-sequence` (in what order). Change one,
+  re-render, commit both. Later phases appear as optional groups in the sequences, **not** as
+  separate diagrams — that duplication is what the old per-phase set got wrong.
 
 ## Commit attribution
 

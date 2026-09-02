@@ -9,16 +9,16 @@
 
 ## Build order
 
-| # | Phase | Delivers | Measure | Diagram |
-|---|---|---|---|---|
-| **1** | **Baseline RAG** — all systems wired | ingest → filter → chunk → **chunk store** → embed → vector store; dense retrieve → grounding gate (floor → refuse) → LLM answer with citations; **eval harness** | **Eval run #1 → baseline numbers** | [P1](images/phase1-baseline.png) |
-| **2** | **+ Reranker** | insert a cross-encoder reranker between retrieve and ground (retrieve top-20 → rerank → keep top-5) | Eval run #2 vs. baseline → *did reranking help?* | [P2](images/phase2-reranker.png) |
-| **3** | **+ Hybrid search** | add a BM25 keyword index; fuse dense + keyword (reciprocal rank fusion) before reranking | Eval run #3 vs. Phase 2 → *did hybrid help, esp. on exact-term queries?* | [P3](images/phase3-hybrid.png) |
-| **4** | **+ Query rewriter** | prepend a small/cheap LLM that rewrites/expands the query before retrieval | Eval run #4 vs. Phase 3 → *does rewriting earn its latency?* | [P4](images/phase4-query-rewriter.png) |
-| **5** | **Deep-dive + deploy + write-up** | consolidate all runs into one comparison table; deploy to HF Spaces / home-lab; **optional Postgres + pgvector migration** ([ADR-0004](decisions/0004-sqlite-chunk-store.md)); write the blog/report | The story: baseline → +reranker → +hybrid → +rewriter | [final](images/final-architecture.png) |
+| # | Phase | Delivers | Measure |
+|---|---|---|---|
+| **1** | **Baseline RAG** — all systems wired | ingest → filter → chunk → **chunk store** → embed → vector store; dense retrieve → grounding gate (floor → refuse) → LLM answer with citations; **eval harness** | **Eval run #1 → baseline numbers** |
+| **2** | **+ Reranker** | insert a cross-encoder reranker between retrieve and ground (retrieve top-20 → rerank → keep top-5) | Eval run #2 vs. baseline → *did reranking help?* |
+| **3** | **+ Hybrid search** | add a BM25 keyword index; fuse dense + keyword (reciprocal rank fusion) before reranking | Eval run #3 vs. Phase 2 → *did hybrid help, esp. on exact-term queries?* |
+| **4** | **+ Query rewriter** | prepend a small/cheap LLM that rewrites/expands the query before retrieval | Eval run #4 vs. Phase 3 → *does rewriting earn its latency?* |
+| **5** | **Deep-dive + deploy + write-up** | consolidate all runs into one comparison table; deploy to HF Spaces / home-lab; **optional Postgres + pgvector migration** ([ADR-0004](decisions/0004-sqlite-chunk-store.md)); write the blog/report | The story: baseline → +reranker → +hybrid → +rewriter |
 
-Each phase's diagram shows what it adds, in amber, on top of everything before it — the set reads
-as one system growing. Sources: [diagrams/](diagrams/); walkthrough:
+Every phase appears in the same two [sequence diagrams](diagrams/) — later-phase components are
+drawn as optional groups, so one picture shows the whole progression. Walkthrough:
 [ARCHITECTURE.md § How the system grows](ARCHITECTURE.md#how-the-system-grows).
 
 Phase 1 is the whole pipeline at its simplest — everything after asks *"does adding X beat this

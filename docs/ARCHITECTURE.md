@@ -9,10 +9,10 @@
 
 ## The whole system
 
-[![Final architecture](images/final-architecture.png)](images/final-architecture.png)
+[![System](images/system.png)](images/system.png)
 
-*Source: [`diagrams/final-architecture.puml`](diagrams/final-architecture.puml) — component colour
-marks the phase that introduced it.*
+*Source: [`diagrams/system.puml`](diagrams/system.puml) — component colour marks the phase that
+introduced it. This diagram shows **shape**; the two sequence diagrams below show **order**.*
 
 ## What it looks like
 
@@ -59,6 +59,15 @@ rather than duplicated components:
 - **The `Chunk Store`.** Vector search returns `chunk_id` + score; the online path hydrates text
   and provenance from the same store the offline path wrote. Chunk text exists in exactly one
   place ([ADR-0005](decisions/0005-one-sqlite-file.md)).
+
+## Ingestion, in order
+
+[![Ingest sequence](images/ingest-sequence.png)](images/ingest-sequence.png)
+
+*Source: [`diagrams/ingest-sequence.puml`](diagrams/ingest-sequence.puml). The chain is
+unsurprising; the **manifest branch** is the part worth reading — an unchanged file is skipped
+without being re-read, and a changed one has its old chunks deleted **before** new ones land, so
+an edited document never leaves orphans.*
 
 ## Component catalogue
 
@@ -133,12 +142,16 @@ See [ADR-0001](decisions/0001-refuse-over-fabricate.md).
 
 ## How the system grows
 
-Each phase adds **exactly one component** and re-runs the same eval. The diagrams below are the
-same system at five points in time; NEW-this-phase components are amber.
+Each phase adds **exactly one component** and re-runs the same eval. Rather than one diagram per
+phase, the two sequence diagrams show every phase at once — later-phase components appear as grey
+`group` blocks, so you can see that **everything Phases 2–4 add sits before the gate**:
+
+[![Query sequence](images/query-sequence.png)](images/query-sequence.png)
+
+*The online path. Grey groups are later phases; the two `alt` branches are the refusals. Source:
+[`diagrams/query-sequence.puml`](diagrams/query-sequence.puml).*
 
 ### Phase 1 — Baseline RAG
-
-[![Phase 1](images/phase1-baseline.png)](images/phase1-baseline.png)
 
 The whole pipeline at its simplest: dense retrieval straight into the gate. Both refusal paths
 and the **eval harness** exist from day one — the harness is the spine, not an afterthought
@@ -149,8 +162,6 @@ The unused seams are already wired as **null objects**: identity `QueryRewriter`
 pipeline ([ADR-0002](decisions/0002-null-object-seams.md)).
 
 ### Phase 2 — + Cross-encoder Reranker
-
-[![Phase 2](images/phase2-reranker.png)](images/phase2-reranker.png)
 
 **What changed:** one component between `Dense Retriever` and `Grounding Gate`, and `retrieve_n`
 goes from 5 to 20.
@@ -163,8 +174,6 @@ whole corpus. Hence the two-stage shape: **recall 20 cheaply, then re-order prec
 **What it costs:** reranking latency on every query, and a second model to host.
 
 ### Phase 3 — + Hybrid Search (BM25 + RRF)
-
-[![Phase 3](images/phase3-hybrid.png)](images/phase3-hybrid.png)
 
 **What changed:** the ingestion path writes the same chunks to a **second index** (BM25, no
 embedding step), and a **Fusion** step merges two ranked lists before reranking. The `Retriever`
@@ -182,8 +191,6 @@ corpus. That's the payoff for [ADR-0005](decisions/0005-one-sqlite-file.md) land
 this phase rather than after it.
 
 ### Phase 4 — + Query Rewriter
-
-[![Phase 4](images/phase4-query-rewriter.png)](images/phase4-query-rewriter.png)
 
 **What changed:** a small LLM sits in front of retrieval and rewrites the question
 (*"how do I make my image smaller?"* → *"multi-stage build, reduce image size, COPY --from"*).
@@ -267,12 +274,10 @@ swap rather than a rewrite ([ADR-0005](decisions/0005-one-sqlite-file.md)).
 
 ## Diagram index
 
-| Diagram | Source | Shows |
+| Diagram | Source | Answers |
 |---|---|---|
-| [Phase 1 — Baseline](images/phase1-baseline.png) | [`.puml`](diagrams/phase1-baseline.puml) | dense retrieval, both refusal paths, eval harness |
-| [Phase 2 — Reranker](images/phase2-reranker.png) | [`.puml`](diagrams/phase2-reranker.puml) | top-20 → rerank → top-5 |
-| [Phase 3 — Hybrid](images/phase3-hybrid.png) | [`.puml`](diagrams/phase3-hybrid.puml) | BM25 index + RRF fusion |
-| [Phase 4 — Rewriter](images/phase4-query-rewriter.png) | [`.puml`](diagrams/phase4-query-rewriter.puml) | small-LLM query rewriting, two LLM roles |
-| [Final architecture](images/final-architecture.png) | [`.puml`](diagrams/final-architecture.puml) | everything, coloured by originating phase |
+| [System](images/system.png) | [`.puml`](diagrams/system.puml) | **what exists and where** — offline / store / online, coloured by phase |
+| [Ingestion sequence](images/ingest-sequence.png) | [`.puml`](diagrams/ingest-sequence.puml) | **in what order ingestion happens**, and what makes a re-ingest cheap |
+| [Query sequence](images/query-sequence.png) | [`.puml`](diagrams/query-sequence.puml) | **where a query can stop** — both gates as branches, later phases as optional groups |
 
 Rendering instructions: [diagrams/README.md](diagrams/README.md).
