@@ -1,0 +1,378 @@
+# The fixed question set — 30 questions, held constant across every phase.
+#
+# ADDING OR REWORDING A QUESTION INVALIDATES COMPARISON WITH EVERY EARLIER RUN
+# (docs/EVAL.md § What makes two runs comparable). Changes land at a phase boundary
+# only, followed by a baseline re-run.
+#
+# Balance (docs/EVAL.md § The question set):
+#   k8s-answerable     12   (40%)
+#   docker-answerable  12   (40%)
+#   should-refuse       6   (20%)
+#
+# ---------------------------------------------------------------- schema
+#
+#   id             stable slug; the JSONL row key, so never renamed
+#   question       asked verbatim, unmodified
+#   class          k8s-answerable | docker-answerable | should-refuse
+#   expect_source  the doc set whose citation is correct (F10). A LIST means either
+#                  is correct — the "both-source" case. `null` for should-refuse.
+#   expect_docs    the document(s) that answer it. Matched against `Chunk.source_doc`,
+#                  which is relative to the SOURCE ROOT configured in sources.yaml
+#                  (`workloads/pods/_index.md`, not
+#                  `content/en/docs/concepts/workloads/pods/_index.md` — see
+#                  ingest/loader.py `walk`). Empty for should-refuse.
+#   tags           which hard case this question exists to exercise. Not decoration:
+#                  docs/EVAL.md requires the per-class breakdown ("hybrid may be flat
+#                  overall and decisive on exact-term questions"), and the aggregate
+#                  cannot be decomposed without these.
+#                      exact-term   a literal token BM25 should win on (Phase 3)
+#                      paraphrase   never uses the doc's vocabulary (Phase 4)
+#                      both-source  answerable from either doc set
+#                      cross-source the answer sits in the OTHER doc set than the
+#                                   question's vocabulary suggests — an F10 trap
+#                      near-miss    a refusal that is adjacent to the corpus
+#                      easy         the sanity case; if this fails, nothing works
+#   note           why this question is in the set, and what its failure would mean
+#
+# Every expect_docs path below was verified to exist in the index, and every question
+# was run through `ask --retrieval-only` against data/infrachat.db before being added.
+# The corpus is a SLICE, not the whole docs: kubernetes = .../docs/concepts,
+# docker = .../manuals/build. Questions outside those slices belong in should-refuse.
+
+questions:
+
+  # ------------------------------------------------------------ k8s-answerable (12)
+
+  - id: k8s-pod-basics
+    question: "What is a Pod?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/pods/_index.md"]
+    tags: [easy]
+    note: >-
+      The floor case. Retrieved at 0.834 with three chunks of the right page in the
+      top 5; if this ever misses, the index or the embedder changed, not the component
+      under test.
+
+  - id: k8s-crashloopbackoff
+    question: "What does CrashLoopBackOff mean?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/pods/pod-lifecycle.md"]
+    tags: [exact-term]
+    note: >-
+      A single opaque token that appears in 10 chunks, all on one page. Dense already
+      wins here (0.856); BM25 should at worst tie, and a Phase 3 regression on this
+      question means fusion is hurting exact matches.
+
+  - id: k8s-imagepullpolicy
+    question: "What are the valid values of imagePullPolicy?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["containers/images.md"]
+    tags: [exact-term]
+    note: >-
+      camelCase API field. Two Docker policy pages score 0.74 against it, so this also
+      watches cross-source attribution on an exact term.
+
+  - id: k8s-probes-liveness-vs-readiness
+    question: "What is the difference between a liveness probe and a readiness probe?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/pods/probes.md", "workloads/pods/pod-lifecycle.md"]
+    tags: []
+    note: >-
+      A comparison question: the answer needs two sections of one page, so it is the
+      clearest case of citation validity mattering more than hit-rate.
+
+  - id: k8s-noexecute-taint
+    question: "What does the NoExecute taint effect do?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["scheduling-eviction/taint-and-toleration.md"]
+    tags: [exact-term]
+    note: >-
+      Deliberate MRR headroom: top-1 is device-taints.md (0.795), a DRA page that
+      mentions the term, and the page that defines it only reaches rank 2. A reranker
+      that cannot fix this is not reading the question.
+
+  - id: k8s-oom-eviction-order
+    question: "When a node runs out of memory, which pod gets killed first?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/pods/pod-qos.md", "scheduling-eviction/node-pressure-eviction.md"]
+    tags: [paraphrase]
+    note: >-
+      Says neither "QoS class" nor "eviction" — the two words the answering pages are
+      built on. node-pressure-eviction.md reaches rank 2; pod-qos.md, which actually
+      states the ordering, is absent from the top 5 entirely.
+
+  - id: k8s-secret-for-db-password
+    question: "How do I store a database password so a container can read it?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["configuration/secret.md"]
+    tags: [paraphrase, cross-source]
+    note: >-
+      The hardest answerable question in the set and the sharpest F10 trap: top-1 is a
+      DOCKER page (metadata/attestations, 0.725) and the correct Kubernetes page is
+      rank 4. "Secret" is a word both doc sets own, so a wrong citation here is a
+      source-accuracy failure, not a retrieval failure.
+
+  - id: k8s-pvc-basics
+    question: "What is a PersistentVolumeClaim?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["storage/persistent-volumes.md"]
+    tags: []
+    note: >-
+      Storage is the largest subtree in the Kubernetes slice (~400 chunks); without a
+      storage question a whole class of regression would go unseen.
+
+  - id: k8s-deployment-maxsurge
+    question: "What does maxSurge control during a Deployment rollout?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/controllers/deployment.md"]
+    tags: [exact-term]
+    note: >-
+      An exact term inside the single largest document (94 chunks). Tests that a
+      literal field name can be found in a long page, not just on a short one.
+
+  - id: k8s-init-vs-sidecar-containers
+    question: "How do init containers differ from sidecar containers?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/pods/init-containers.md", "workloads/pods/sidecar-containers.md"]
+    tags: []
+    note: >-
+      The answer legitimately spans two documents, so a single correct citation is a
+      partial answer. Watches whether the generator cites both pages it was shown.
+
+  - id: k8s-anti-affinity-spread
+    question: "How do I stop two copies of the same app from being placed on one node?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["scheduling-eviction/assign-pod-node.md", "scheduling-eviction/topology-spread-constraints.md"]
+    tags: [paraphrase]
+    note: >-
+      The weakest baseline retrieval in the set: no mention of affinity, topology or
+      constraint, so assign-pod-node.md never appears and topology-spread-constraints.md
+      scrapes in at rank 5 (0.691). Rank 5 of 5 is where a rewriter or a reranker has
+      the most to prove.
+
+  - id: k8s-service-clusterip
+    question: "What is a Service of type ClusterIP?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["services-networking/service.md", "services-networking/cluster-ip-allocation.md"]
+    tags: [exact-term]
+    note: >-
+      Networking coverage plus MRR headroom: top-1 is field-selectors.md (0.836),
+      which merely uses ClusterIP in an example, and service.md is rank 2.
+
+  # ------------------------------------------------------------ docker-answerable (12)
+
+  - id: dkr-multi-stage-basics
+    question: "What is a multi-stage build?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/multi-stage.md", "building/best-practices.md"]
+    tags: [easy]
+    note: >-
+      The Docker-side sanity case. best-practices.md opens with the multi-stage
+      section, so both pages are legitimate answers.
+
+  - id: dkr-shrink-image
+    question: "My image is 1.5GB. How do I shrink it?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/multi-stage.md", "building/best-practices.md"]
+    tags: [paraphrase, cross-source]
+    note: >-
+      docs/EVAL.md's named rewriter case, and the only answerable question the baseline
+      MISSES outright: it never says "multi-stage", "layer" or even "image size", so the
+      top 5 is Kubernetes storage/volumes.md and Docker metadata/annotations.md and
+      neither answering page appears at all (top-1 0.678). Without it hit-rate@5 sits at
+      1.000 and Phases 3-4 have nowhere to move it. The expected baseline outcome is a
+      false refusal — a real cost of dense-only retrieval, recorded rather than hidden.
+
+  - id: dkr-cache-mount
+    question: "What does --mount=type=cache do in a RUN instruction?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["cache/optimize.md", "cache/invalidation.md"]
+    tags: [exact-term]
+    note: >-
+      Punctuation-heavy literal (8 chunks contain it verbatim). The case most likely to
+      expose a tokenisation difference between the dense and BM25 arms in Phase 3.
+
+  - id: dkr-build-secret
+    question: "How do I pass a secret to a build without baking it into the image?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/secrets.md"]
+    tags: []
+    note: >-
+      The Docker half of the "secret" collision with k8s-secret-for-db-password. Both
+      must cite their own doc set for source accuracy to mean anything.
+
+  - id: dkr-arg-vs-env
+    question: "What is the difference between ARG and ENV in a Dockerfile?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/variables.md", "concepts/dockerfile.md"]
+    tags: [exact-term]
+    note: >-
+      Two three-letter uppercase tokens that also appear as ordinary English ("ARG"
+      matches 229 Docker and 222 Kubernetes chunks). A BM25 arm with no term weighting
+      could easily make this worse, not better.
+
+  - id: dkr-bake-inheritance
+    question: "How do I inherit from another target in a bake file?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["bake/inheritance.md"]
+    tags: [exact-term]
+    note: >-
+      The answerable counterpart to refuse-sourdough-bake. Same "bake" vocabulary, one
+      must be answered and the other refused — which is the whole point of keeping
+      them both in the set.
+
+  - id: dkr-multi-platform
+    question: "How do I build an image for both arm64 and amd64?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/multi-platform.md"]
+    tags: []
+    note: >-
+      Architecture names, not the word "multi-platform". Sits between exact-term and
+      paraphrase: the tokens are literal but absent from the page's headings.
+
+  - id: dkr-cache-mode-max
+    question: "What does mode=max mean for a cache export?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["cache/backends/_index.md"]
+    tags: [exact-term]
+    note: >-
+      A key=value literal. Dense handles it at 0.853 today; the interesting outcome is
+      whether fusion holds that, since `floor` reads whatever score the last stage wrote.
+
+  - id: dkr-driver-difference
+    question: "What is the difference between the docker and docker-container driver?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["builders/drivers/docker-container.md", "builders/drivers/docker.md", "builders/drivers/_index.md"]
+    tags: [exact-term]
+    note: >-
+      Two names that differ by one hyphenated suffix — the case where a dense embedding
+      is most likely to conflate two documents it should separate.
+
+  - id: dkr-build-inside-k8s
+    question: "How do I build container images inside a Kubernetes cluster?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["builders/drivers/kubernetes.md"]
+    tags: [cross-source]
+    note: >-
+      The F10 trap in the other direction: the question is phrased in Kubernetes
+      vocabulary but only the Docker docs answer it. Baseline top-1 is Kubernetes
+      containers/images.md (0.816, about pulling images), with the four correct Docker
+      chunks at ranks 2-5. Citing Kubernetes here is a source-accuracy failure.
+
+  - id: dkr-cache-layer-ordering
+    question: "How do I stop pip install from running again every time I change my source code?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["cache/invalidation.md", "building/best-practices.md", "cache/optimize.md"]
+    tags: [paraphrase]
+    note: >-
+      Names a tool the corpus barely mentions and no concept the answer uses — not
+      "layer", "cache invalidation" or "COPY order". The answering page reaches rank 1
+      anyway (0.740), which is itself worth recording as a baseline fact.
+
+  - id: dkr-gpu-access
+    question: "How do I give a container access to a GPU?"
+    class: docker-answerable
+    expect_source: [docker, kubernetes]
+    expect_docs: ["building/cdi.md", "extend-kubernetes/compute-storage-net/device-plugins.md"]
+    tags: [both-source]
+    note: >-
+      docs/EVAL.md's both-source case: answerable from either doc set (Docker CDI for
+      builders, Kubernetes device plugins for pods), so either citation is correct and
+      the metric checks only that the citation names the doc set it actually used.
+      Baseline returns five Docker CDI chunks and no Kubernetes page.
+
+  # ------------------------------------------------------------ should-refuse (6)
+
+  - id: refuse-sourdough-bake
+    question: "How do I bake sourdough bread?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The documented collision (CLAUDE.md, answer/citations.py): scores 0.652 because
+      Docker's build tool is called Bake, so it clears floor=0.55 and the retrieval
+      gate cannot catch it. This question exists to prove gate 2 — the citation check —
+      does work that the floor cannot.
+
+  - id: refuse-podman-rootless
+    question: "How does Podman rootless networking work?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      docs/EVAL.md's named hard refusal. Scores 0.742: "rootless" appears in four
+      Docker chunks and "podman" in two Kubernetes ones, both only in passing. Every
+      word is in-domain and none of it is answerable.
+
+  - id: refuse-compose-run-app
+    question: "How do I write a docker-compose.yml to run my web app and database together?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The highest-scoring refusal in the set (0.785) and the best collision found:
+      bake/compose-file.md is about consuming a Compose file AS a bake definition, not
+      about running services. The corpus contains zero chunks mentioning "compose up".
+      If any question in this class gets fabricated, it will be this one.
+
+  - id: refuse-kubeadm-upgrade
+    question: "How do I upgrade a cluster with kubeadm?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      In-domain but outside the slice: the corpus is .../docs/concepts, and cluster
+      upgrades live in /docs/tasks. kubeadm is named in nine chunks, always as a link
+      out. Scores 0.769. Tests the boundary of the corpus, not the boundary of the
+      subject.
+
+  - id: refuse-dockerhub-rate-limits
+    question: "What are the Docker Hub image pull rate limits?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The Docker-side mirror of refuse-kubeadm-upgrade: the slice is manuals/build, and
+      Docker Hub's limits are documented elsewhere. Scores 0.750 against a BuildKit
+      registry-mirror page, which is adjacent enough to be quotable and does not
+      contain a single number the question asks for.
+
+  - id: refuse-capital-of-france
+    question: "What is the capital of France?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: []
+    note: >-
+      The only question in the set that the retrieval floor refuses on its own (0.455
+      vs floor 0.55). Kept deliberately easy: it is the control that proves gate 1
+      fires at all, so a refusal-recall number can be read as "which gate did the
+      work", not just "it refused".

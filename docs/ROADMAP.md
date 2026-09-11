@@ -81,29 +81,54 @@ Each component phase follows the same loop:
 
 ## Current status
 
-**Phase 1 — in progress.** The offline path is being built module by module; nothing is wired
-into a CLI yet.
+**Phase 1 — feature-complete, baseline recorded.** All four commands run end to end:
+`ingest`, `ask` (and `ask --retrieval-only`), `eval`, `serve`.
 
-Done:
+Built:
 
-- ✅ Docs: [SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md), [EVAL](EVAL.md), five
-  [diagrams](diagrams/), ADRs [0001](decisions/0001-refuse-over-fabricate.md)–[0006](decisions/0006-pluggable-sources.md).
-- ✅ **Corpus cloned** — sparse checkout of the two configured subfolders, 13MB, 307 files.
-- ✅ `models.py` — Chunk / Retrieved / Citation / Answer. F9 is enforced in the type: an uncited
-  grounded answer cannot be constructed.
-- ✅ `config.py` + `config.yaml` + `sources.yaml` — two-file config, per-source `clean` seam,
-  generated refusal message, later phases commented out.
-- ✅ `ingest/loader.py` — deterministic walk, source-relative paths.
-- ✅ `ingest/filter.py` — F2, every drop carries the rule that caused it.
+- ✅ **Ingestion** — loader → filter → cleaner → chunker, 281 files → 4,908 chunks.
+  Re-ingest is incremental and sub-second when nothing changed; the manifest digest covers
+  chunking and embedder settings, so changing either forces a rebuild rather than leaving a
+  stale index.
+- ✅ **Storage** — one SQLite file: `chunks`, `files`, `vec_chunks` (sqlite-vec, cosine).
+- ✅ **Retrieval** — dense retriever plus the Phase 2/3/4 null objects.
+- ✅ **Answering** — both gates, the grounded prompt, the citation check, an
+  OpenAI-compatible generator (Groq).
+- ✅ **Eval harness** + a 30-question fixed set (12 k8s / 12 docker / 6 should-refuse),
+  every `expect_docs` path verified against the live index.
+- ✅ **Demo UI** (Gradio), **Docker** image + compose, and three test files.
 
-Next, in order:
+### Baseline — `eval/runs/baseline.jsonl`
 
-- ⏳ `ingest/chunker.py` — frontmatter + Hugo shortcode stripping, overlapping windows.
-- ⏳ `store/chunks.py` — the one SQLite file: `chunks`, `files`, `vec_chunks`.
-- ⏳ `embed.py` — the `Embedder` seam (fastembed, asymmetric query/passage).
-- ⏳ `cli.py` — `ingest` and `ingest --dry-run`, the first runnable command.
-- ⏳ Then the online path: retriever → gate → prompt → LLM → citation check → `ask`.
-- ⏳ Then `serve` (Gradio), the eval harness + question set, Docker, and the Spaces deploy.
+| | |
+|---|---|
+| hit-rate@5 | **0.958** |
+| MRR | **0.847** |
+| MRR by tag | exact-term 0.900 · paraphrase 0.700 · cross-source 0.333 |
 
-Open decisions blocking nothing but worth settling: narrowing `secret_patterns` (today `*secret*`
-excludes the Kubernetes Secrets docs), and whether `_index.md` should be stripped from citation tags.
+### What the baseline already tells us about Phases 2-4
+
+The harness earned its keep before a single component was added:
+
+- **Exact-term retrieval is already at 0.900 MRR.** Phase 3's premise was that BM25 would
+  win on flag names and error codes. There is very little room there — expect a small or
+  negative delta, and report it as a result.
+- **Paraphrase reached 0.700 only after a chunking fix** (the overlap carry was a no-op at
+  59% of boundaries; fixing it moved paraphrase MRR 0.390 → 0.700 — see
+  `eval/runs/baseline-pre-overlap-fix.jsonl`). Phase 4's rewriter has correspondingly less
+  headroom than planned.
+- **Cross-source is the weak spot at 0.333** — a question answerable from one doc set whose
+  top hits come from the other. That is reranking territory, so Phase 2 has the clearest
+  case of the three.
+- **Five of six should-refuse questions clear the retrieval floor** and can only be stopped
+  by the citation gate. The two-gate design in ADR-0001 is now an empirical result rather
+  than an argument.
+
+### Open
+
+- ⏳ `retrieval.floor` is still the provisional **0.55**. The eval set exists to set it
+  properly; it must not be tuned on the same questions it is then scored against.
+- ⏳ Deploy to Hugging Face Spaces (image builds and runs locally; nothing has run on Spaces).
+- ⏳ Minor: `_index` in citation tags (41 docs), HTML comments and link URLs left in chunk
+  text — each changes chunk content, so each invalidates the baseline and wants a
+  re-measure.

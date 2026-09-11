@@ -1,0 +1,46 @@
+# What `docker build` is allowed to upload. Two jobs: keep the context small, and keep
+# things out of the image that must never be in it.
+
+# --- never, under any circumstances ---------------------------------------------------
+.env                 # INFRACHAT_LLM_API_KEY lives here; compose injects it at run time
+*.local.yaml         # local config overrides
+.git/
+.gitignore
+
+# --- the corpus: mounted, not copied --------------------------------------------------
+# Two pinned doc checkouts. `ingest` reads them through a read-only bind mount
+# (docker-compose), and the demo image has no use for them at all — it ships the index
+# that was built FROM them.
+corpus/
+
+# --- the index: exactly one file, and only the `demo` stage copies it -----------------
+# `data/*` then an un-ignore, so the SQLite database reaches the build context while the
+# WAL sidecars and anything else in data/ stay out. The `app` stage does not copy it.
+data/*
+!data/infrachat.db
+
+# --- python / tooling -----------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- not read at runtime --------------------------------------------------------------
+# Docs, diagrams and eval results are the project's output, not the image's input.
+docs/
+eval/runs/
+README.md
+CLAUDE.md
+pyproject.toml
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# --- editor / os ----------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/

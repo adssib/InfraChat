@@ -105,15 +105,29 @@ def chunk_text(
     window: list[_Para] = []
 
     def carry_tail() -> list[_Para]:
-        """Trailing paragraphs that fit inside `overlap` — the context bridge."""
-        tail: list[_Para] = []
-        total = 0
-        for p in reversed(window):
-            if total + len(p.text) > overlap:
-                break
-            tail.insert(0, p)
-            total += len(p.text) + 2
-        return tail
+        """The trailing `overlap` characters of the emitted window — the context bridge.
+
+        Originally this carried whole *paragraphs* small enough to fit inside `overlap`.
+        Measured on the real corpus, that meant **no overlap at all at ~59% of
+        boundaries**: documentation paragraphs are mostly longer than 100 characters, so
+        there was never anything small enough to carry, and the bridge silently did not
+        exist. An answer split across two chunks landed whole in neither.
+
+        Carrying raw trailing text instead is paragraph-unaligned but always present. The
+        cut is moved to the next word boundary so a chunk never opens mid-word.
+        """
+        if overlap <= 0 or not window:
+            return []
+        body = "\n\n".join(p.text for p in window)
+        tail = body if len(body) <= overlap else body[-overlap:]
+        if len(body) > overlap:
+            space = tail.find(" ")
+            if 0 <= space < len(tail) - 1:
+                tail = tail[space + 1:]
+        tail = tail.strip()
+        # The carried text reports the last paragraph's start line: it is a fragment of
+        # that paragraph, so the citation stays inside the range a reader would check.
+        return [_Para(tail, window[-1].start_line)] if tail else []
 
     length = 0
     for para in paras:
@@ -131,16 +145,11 @@ def chunk_text(
     if window:
         windows.append(window)
 
-    # A window shorter than `overlap` is already contained in its neighbour in full, so it
-    # carries no new information — only a short, noisy embedding. Absorb it backwards.
-    merged: list[list[_Para]] = []
-    for w in windows:
-        body_len = sum(len(p.text) + 2 for p in w)
-        prev_len = sum(len(p.text) + 2 for p in merged[-1]) if merged else 0
-        if merged and body_len < overlap and prev_len + body_len <= size:
-            merged[-1].extend(p for p in w if p not in merged[-1])
-        else:
-            merged.append(w)
+    # (An "absorb runt windows backwards" pass lived here. It was proven unreachable:
+    # a non-first window always contains the paragraph whose arrival triggered the
+    # previous emit, so prev_len + body_len > size always held. Removed rather than left
+    # as dead code that looks like a safeguard.)
+    merged = windows
 
     chunks: list[Chunk] = []
     for ordinal, w in enumerate(merged):

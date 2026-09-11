@@ -1,0 +1,8 @@
+# Development-only dependencies. NOT installed in the Docker image — see Dockerfile.
+# Install with: ./.venv/bin/pip install -r requirements-dev.txt
+# (the -r below pulls in every runtime pin, so you only need this one file)
+-r requirements.txt
+
+iniconfig==2.3.0
+pluggy==1.6.0
+pytest==9.1.1

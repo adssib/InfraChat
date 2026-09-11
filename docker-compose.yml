@@ -1,0 +1,71 @@
+# Local / home-lab only. This file does NOT deploy the public demo — nothing here runs on
+# Hugging Face Spaces, which builds the Dockerfile itself and mounts no volumes
+# (docs/DEPLOY.md).
+#
+# The two services below are the two halves of ADR-0005's deployment story:
+#
+#   infrachat   stage `app`.  ./data is a mounted volume — the index is built HERE, by
+#               `ingest`, and lives on the host. This is the only writer.
+#   demo        stage `demo`. No volumes at all: the index is baked into the image as a
+#               build artifact. Present so the Spaces image can be run locally exactly as
+#               the public demo runs it — ephemeral filesystem and all.
+#
+# Build the index, then ask it something:
+#   docker compose run --rm infrachat ingest -c config.yaml
+#   docker compose run --rm infrachat ingest --dry-run -c config.yaml     # no writes
+#   docker compose run --rm infrachat ask --retrieval-only "what is a Pod?"
+#   docker compose run --rm infrachat ask "how do I expose a Deployment?"  # needs the key
+#   docker compose run --rm infrachat eval -c config.yaml                 # needs the key
+#   docker compose up infrachat                                           # the UI, :7860
+
+name: infrachat
+
+services:
+
+  infrachat:
+    build:
+      context: .
+      target: app           # NOT `demo`: deliberately no index inside this image
+    image: infrachat:local
+    # The LLM key is never in config.yaml, never in the image, never in git. config.yaml
+    # names the env var (`llm.api_key_env`) and compose injects the value here. Nothing
+    # reads .env from inside the container — no python-dotenv in the dependency tree,
+    # because by the time the process starts this is an ordinary environment variable.
+    env_file:
+      - path: .env          # INFRACHAT_LLM_API_KEY=gsk_...   (gitignored)
+        required: false     # ingest and `ask --retrieval-only` need no key at all
+    volumes:
+      # The one SQLite file — chunks, manifest and vectors (ADR-0005). Read-write: this
+      # is what `ingest` produces, and it must survive `docker compose down`.
+      - ./data:/app/data
+      # The pinned corpus clones, read-only: ingest reads them and must never write to
+      # them. Not in the image — see .dockerignore.
+      - ./corpus:/app/corpus:ro
+      # The question set in, the run results out. `eval` is a local measurement job for
+      # the same reason `ingest` is: its output (eval/runs/*.jsonl) is committed, so it
+      # has to land on the host, not inside a container layer.
+      - ./eval:/app/eval
+    ports:
+      - "7860:7860"         # same port as Spaces, so local and demo behave identically
+    # `serve` is not wired yet: today `compose up` exits 2 with a message saying so.
+    command: ["serve", "-c", "config.yaml"]
+
+  demo:
+    # Not started by `docker compose up`. Run it explicitly:
+    #   docker compose --profile demo build demo
+    #   docker compose --profile demo up demo
+    profiles: ["demo"]
+    build:
+      context: .
+      target: demo          # the stage Spaces builds (it is the Dockerfile's last stage)
+    image: infrachat:demo
+    env_file:
+      - path: .env
+        required: false     # on Spaces this is a repository secret, not a file
+    # NO volumes. Not an omission — the point. Free-tier Spaces filesystems are
+    # ephemeral, so the deployed image carries a pre-built, read-only index and
+    # `infrachat ingest` never runs inside it. If this service can answer a question with
+    # no volume attached, so can the Space.
+    ports:
+      - "7861:7860"         # a second port so it can run alongside the local service
+    command: ["serve", "-c", "config.yaml"]

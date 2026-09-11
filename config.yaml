@@ -31,13 +31,13 @@ infrachat:
     results_dir: "eval/runs"
     run_label: "baseline"
 
-  # The generator. Needed from build-step 5 (`ask`) onward — `ingest` and
-  # `ask --retrieval-only` run without it, so no API key is required to get started.
-  # llm:
-  #   base_url: "https://api.groq.com/openai/v1"
-  #   model: "llama-3.3-70b-versatile"
-  #   api_key_env: "INFRACHAT_LLM_API_KEY"   # the env var NAME, never the key
-  #   max_context_chunks: 5
+  # The generator. `ingest` and `ask --retrieval-only` still run without a key.
+  llm:
+    base_url: "https://api.groq.com/openai/v1"
+    model: "openai/gpt-oss-20b"
+    api_key_env: "INFRACHAT_LLM_API_KEY"   # the env var NAME, never the key
+    max_context_chunks: 5
+    max_tokens: 4096          # must cover hidden reasoning tokens, not just the answer
 
   # ---------------------------------------------------------------- PHASE 2
   # A cross-encoder re-scores the top-20 jointly and keeps the best 5.

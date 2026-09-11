@@ -8,6 +8,7 @@ Start here. The docs are split by **purpose**, so a reviewer can find what they 
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **How** it's shaped — components, the offline/online split, the phase-by-phase diagrams, assumptions and risks. |
 | [ROADMAP.md](ROADMAP.md) | **In what order** — the 5-phase build plan and the definition of done. |
 | [EVAL.md](EVAL.md) | **How it's measured** — the question set, the metric definitions, and the comparison table every phase fills in. |
+| [DEPLOY.md](DEPLOY.md) | **How to ship it** — the Docker image, the volume, and the read-only demo build. |
 | [decisions/](decisions/) | **Why** — Architecture Decision Records: every tradeoff, on the record. |
 | [diagrams/](diagrams/) | PlantUML sources — one system diagram plus two sequence diagrams (rendered into [images/](images/)). |
 

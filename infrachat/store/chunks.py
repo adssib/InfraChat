@@ -28,9 +28,22 @@ import sqlite_vec
 from infrachat.models import Chunk
 
 
-def content_hash(text: str) -> str:
-    """Stable digest of a file's raw bytes — the manifest's change detector."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def content_hash(text: str, *, params: str = "") -> str:
+    """The manifest's change detector.
+
+    Digests the file's raw text **and the parameters that decide what chunks come out of
+    it** — chunk size, overlap, the cleaner, the embedder. Hashing the text alone was a
+    silent-staleness bug: changing `chunk.overlap` left every hash identical, so a
+    re-ingest skipped all 281 files and the index kept chunks built under the old
+    settings while config claimed the new ones. For a project whose claims rest on
+    comparability, an index that quietly disagrees with its config is the worst failure
+    mode available.
+    """
+    h = hashlib.sha256(text.encode("utf-8"))
+    if params:
+        h.update(b"\x00")
+        h.update(params.encode("utf-8"))
+    return h.hexdigest()
 
 
 def _f32(vector: Sequence[float]) -> bytes:
