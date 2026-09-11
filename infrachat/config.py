@@ -102,6 +102,9 @@ class LLMConfig(BaseModel):
     model: str
     api_key_env: str = "INFRACHAT_LLM_API_KEY"
     max_context_chunks: int
+    # Reasoning models (gpt-oss et al.) spend this budget on hidden reasoning tokens
+    # BEFORE writing any answer. Too low and `content` comes back empty.
+    max_tokens: int = 4096
 
     def api_key(self) -> str:
         """Read the key at call time, from the env var named in config.
