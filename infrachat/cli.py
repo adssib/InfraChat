@@ -15,12 +15,17 @@ import time
 from pathlib import Path
 
 from infrachat import embed
+from infrachat.answer import llm
 from infrachat.config import Config, load_config
 from infrachat.ingest.chunker import chunk_text
 from infrachat.ingest.cleaner import for_strategy
 from infrachat.ingest.filter import judge, DropReason
 from infrachat.ingest.loader import SourceMissingError, walk
 from infrachat.models import Chunk
+from infrachat.pipeline import Deps, answer_query, retrieve
+from infrachat.retrieve.dense import DenseRetriever
+from infrachat.retrieve.rerank import PassthroughReranker
+from infrachat.retrieve.rewrite import IdentityRewriter
 from infrachat.store.chunks import ChunkStore, content_hash
 
 
@@ -52,11 +57,16 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         db_path = cfg.db_path if cfg.db_path.is_absolute() else root / cfg.db_path
         store = ChunkStore(db_path, dim=embedder.dim)
 
+    # Everything downstream of the raw bytes that affects what gets stored.
+    ingest_params = (f"chunk={cfg.chunk.size}/{cfg.chunk.overlap}"
+                     f"|embedder={cfg.embedder.model}")
+
     started = time.monotonic()
     totals = dict(scanned=0, kept=0, skipped=0, chunks=0, dropped=0)
 
     for source in sources:
         cleaner = for_strategy(source.clean)
+        source_params = f"{ingest_params}|clean={source.clean}"
         print(f"\n{source.name}  ({source.path})")
         try:
             candidates = list(walk(source, root))
@@ -75,7 +85,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             kept += 1
 
             raw = cand.path.read_text(errors="replace")
-            digest = content_hash(raw)
+            # Any change to these re-chunks or re-embeds the file; see content_hash.
+            digest = content_hash(raw, params=source_params)
 
             if store is not None and not store.needs_reingest(source.name, cand.rel_path, digest):
                 skipped += 1
@@ -90,8 +101,13 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             )
             chunked += len(chunks)
 
-            if store is not None and chunks:
-                vectors = embedder.embed_documents([c.text for c in chunks])
+            if store is not None:
+                # Record the manifest row even when a file yields no chunks — Hugo
+                # section stubs are pure frontmatter and clean to nothing. Without the
+                # row, `needs_reingest` sees no record and re-reads them on every run
+                # forever, and the manifest stops being a truthful list of what ingest
+                # has seen.
+                vectors = embedder.embed_documents([c.text for c in chunks]) if chunks else []
                 store.replace_file(source=source.name, rel_path=cand.rel_path,
                                    digest=digest, chunks=chunks, vectors=vectors)
 
@@ -121,12 +137,106 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
-def _unbuilt(name: str, after: str):
-    def run(args: argparse.Namespace) -> int:
-        print(f"`infrachat {name}` is not built yet — it lands after {after}.\n"
-              f"Working today: infrachat ingest [--dry-run]", file=sys.stderr)
+def _open_index(cfg: Config, root: Path) -> tuple[ChunkStore, object]:
+    """Open the built index, or explain how to build it."""
+    embedder = embed.build(cfg.embedder.model)
+    db_path = cfg.db_path if cfg.db_path.is_absolute() else root / cfg.db_path
+    if not db_path.exists():
+        raise SystemExit(f"no index at {db_path}\n  build it first:  infrachat ingest -c <config>")
+    return ChunkStore(db_path, dim=embedder.dim), embedder
+
+
+def _build_deps(cfg: Config, store: ChunkStore, embedder, *, with_llm: bool) -> Deps:
+    """Assemble the seams from config.
+
+    Phase 1 always uses the null objects. Turning a later-phase toggle on is refused
+    loudly rather than silently ignored — a config that says `rerank.enabled: true` while
+    the pipeline quietly passes through would make an eval run mislabel its own results.
+    """
+    for flag, phase in [(cfg.rerank.enabled, "2 (reranker)"),
+                        (cfg.retrieval.hybrid.enabled, "3 (hybrid)"),
+                        (cfg.rewrite.enabled, "4 (query rewriter)")]:
+        if flag:
+            raise SystemExit(f"config enables a component from Phase {phase}, which is not built yet.\n"
+                             f"  Set it back to false — an enabled-but-absent component would "
+                             f"mislabel your eval results.")
+    return Deps(
+        rewriter=IdentityRewriter(),
+        retriever=DenseRetriever(store, embedder),
+        reranker=PassthroughReranker(),
+        llm=llm.build(cfg.require_llm()) if with_llm else None,
+    )
+
+
+def cmd_ask(args: argparse.Namespace) -> int:
+    """One question → a cited answer, or one of the two refusals."""
+    question = " ".join(args.question).strip()
+    if not question:
+        print("error: ask what?  e.g. infrachat ask \"what is a Pod?\"", file=sys.stderr)
         return 2
-    return run
+
+    cfg = load_config(args.config)
+    root = Path(args.config).resolve().parent
+    store, embedder = _open_index(cfg, root)
+    try:
+        deps = _build_deps(cfg, store, embedder, with_llm=not args.retrieval_only)
+
+        if args.retrieval_only:
+            r = retrieve(question, cfg, deps)
+            print(f"\n{r.decision}\n")
+            for i, hit in enumerate(r.hits, 1):
+                preview = " ".join(hit.chunk.text.split())[:96]
+                print(f"  {i}. {hit.score:.3f}  {hit.chunk.tag}")
+                print(f"      {hit.chunk.source_doc} · {hit.chunk.source_location}")
+                print(f"      {preview}...")
+            if not r.decision.passed:
+                print(f"\n  → would refuse: {cfg.refusal_message()}")
+            return 0
+
+        answer = answer_query(question, cfg, deps)
+        print()
+        print(answer.text)
+        if answer.citations:
+            print()
+            for c in answer.citations:
+                print(f"  [{c.tag}]  {c.source_doc} · {c.source_location}")
+        return 0
+    finally:
+        store.close()
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    """Run the fixed question set and write a comparable results file."""
+    from infrachat import evaluate
+
+    cfg = load_config(args.config)
+    root = Path(args.config).resolve().parent
+    store, embedder = _open_index(cfg, root)
+    try:
+        deps = _build_deps(cfg, store, embedder, with_llm=not args.retrieval_only)
+        summary = evaluate.run(cfg, deps, root=root, progress=not args.quiet)
+        print()
+        print(evaluate.format_summary(summary))
+        return 0
+    finally:
+        store.close()
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Serve the demo UI."""
+    from infrachat import ui
+
+    cfg = load_config(args.config)
+    root = Path(args.config).resolve().parent
+    store, embedder = _open_index(cfg, root)
+    try:
+        # with_llm=True even though the key may be missing: ui surfaces that in the page
+        # rather than refusing to start, so the retrieval half stays demoable.
+        deps = _build_deps(cfg, store, embedder, with_llm=True)
+        ui.launch(cfg, deps, host=args.host, port=args.port)
+        return 0
+    finally:
+        store.close()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -141,15 +251,25 @@ def build_parser() -> argparse.ArgumentParser:
                      help="walk, filter and chunk, but write nothing and load no model")
     ing.set_defaults(func=cmd_ingest)
 
-    for name, help_text, after in [
-        ("ask", "ask one question", "the retriever and the grounding gate"),
-        ("eval", "run the fixed question set", "`ask`"),
-        ("serve", "run the demo UI", "`ask`"),
-    ]:
-        sp = subs.add_parser(name, help=help_text)
-        sp.add_argument("-c", "--config", default="config.yaml")
-        sp.add_argument("question", nargs="*")
-        sp.set_defaults(func=_unbuilt(name, after))
+    ask = subs.add_parser("ask", help="ask one question")
+    ask.add_argument("question", nargs="+")
+    ask.add_argument("-c", "--config", default="config.yaml")
+    ask.add_argument("--retrieval-only", action="store_true",
+                     help="show what retrieval found and what the gate decided; no LLM, no API key")
+    ask.set_defaults(func=cmd_ask)
+
+    ev = subs.add_parser("eval", help="run the fixed question set")
+    ev.add_argument("-c", "--config", default="config.yaml")
+    ev.add_argument("--retrieval-only", action="store_true",
+                    help="score retrieval only; no LLM, no API key")
+    ev.add_argument("--quiet", action="store_true", help="no per-question progress")
+    ev.set_defaults(func=cmd_eval)
+
+    sv = subs.add_parser("serve", help="run the demo UI")
+    sv.add_argument("-c", "--config", default="config.yaml")
+    sv.add_argument("--host", default="0.0.0.0")
+    sv.add_argument("--port", type=int, default=7860, help="7860 is required by HF Spaces")
+    sv.set_defaults(func=cmd_serve)
 
     return p
 
