@@ -37,7 +37,7 @@ Each entry names the chunk(s) that *should* be retrieved, so hit-rate is checkab
   question: "What is a Pod?"
   class: k8s-answerable
   expect_source: kubernetes
-  expect_docs: ["content/en/docs/concepts/workloads/pods/_index.md"]
+  expect_docs: ["workloads/pods/_index.md"]   # relative to the SOURCE root, not the repo
 
 - id: refuse-lambda
   question: "How do I configure an AWS Lambda function?"

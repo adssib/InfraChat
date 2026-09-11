@@ -30,11 +30,22 @@ A: A multi-stage build uses multiple FROM statements so build artifacts can be
    copied into a smaller final image, keeping it lean. [docker:manuals/build/multi-stage]
 ```
 
-**Refusal (in neither doc set):**
+**Refusal — gate 1, retrieval floor (F8):**
 ```
-Q: How do I configure an AWS Lambda function?
-A: Not found in the Kubernetes or Docker docs.
+Q: Who won the 2022 World Cup?
+A: Not found in the Kubernetes or Docker docs.        (top-1 similarity 0.499 < floor)
 ```
+
+**Refusal — gate 2, citation check (F9):**
+```
+Q: How do I bake sourdough bread?
+A: Insufficient grounding to answer.
+```
+Measured: that question scores **0.652** and clears the floor, because Docker has a build
+tool called **Bake**. The chunk genuinely is similar, so no threshold catches it — only
+the model reading the excerpts does. Five of the six `should-refuse` questions in the eval
+set behave this way, which is the empirical case for two independent gates
+([ADR-0001](decisions/0001-refuse-over-fabricate.md)).
 
 The refusal is the demo. Anyone can show a RAG system answering; showing one decline cleanly is
 the part that's actually hard.
