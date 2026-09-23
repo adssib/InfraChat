@@ -23,13 +23,20 @@ infrachat:
   retrieval:
     retrieve_n: 20                   # candidates fetched (only matters once rerank is on)
     k: 5                             # final chunks sent to the LLM
-    floor: 0.55                      # below this top-1 score => refuse (F8)
-                                     # measured: 0.35 refuses nothing with bge-small
+    floor: 0.65                      # below this top-1 score => refuse (F8)
+                                     # Derived, not guessed: min(answerable) - 1 SD
+                                     # = 0.7014 - 0.0428. See eval/floor-tuning.md.
+                                     # The accuracy-maximising value (0.73) scores
+                                     # 79.3% fitted but 75.2% under cross-validation
+                                     # — worse than not tuning. Gate 1 is an
+                                     # out-of-distribution trip-wire, not a classifier:
+                                     # it can carry ~2 of 21 refusals here, gate 2
+                                     # carries the other 19.
 
   eval:
     question_set: "eval/questions.yaml"
     results_dir: "eval/runs"
-    run_label: "baseline"
+    run_label: "+reranker"
 
   # The generator. `ingest` and `ask --retrieval-only` still run without a key.
   llm:
@@ -41,9 +48,17 @@ infrachat:
 
   # ---------------------------------------------------------------- PHASE 2
   # A cross-encoder re-scores the top-20 jointly and keeps the best 5.
-  # rerank:
-  #   enabled: true
-  #   model: "Xenova/ms-marco-MiniLM-L-6-v2"
+  # Built (infrachat/retrieve/rerank.py) but left OFF: cli.py::_build_deps still
+  # constructs the pass-through unconditionally, so flipping this to true today
+  # only makes the CLI refuse to run. Turn it on together with that change, and
+  # change eval.run_label to "+reranker" in the same edit — a Phase 2 run written
+  # to baseline.jsonl is worse than no run.
+  #
+  # The reranker reorders; it does NOT rewrite `score`, so `floor` above keeps
+  # meaning what eval/floor-tuning.md tuned it to mean. See the module docstring.
+  rerank:
+    enabled: true
+    model: "Xenova/ms-marco-MiniLM-L-6-v2"
 
   # ---------------------------------------------------------------- PHASE 3
   # A BM25 arm (SQLite FTS5) fused with dense results by reciprocal rank.

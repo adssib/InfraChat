@@ -96,6 +96,25 @@ class Question:
         return self.cls != "should-refuse"
 
 
+def _question_set_digest(questions: "list[Question]") -> str:
+    """Digest the questions themselves, not the file's bytes.
+
+    Hashing the raw file meant a comment-only edit — correcting a stale header, say —
+    marked the set as changed and broke comparability with runs whose questions were
+    byte-identical. That penalises documenting the set, which is backwards.
+
+    Covers everything that changes what is asked or how it is scored: id, text, class,
+    expected source and expected docs, in file order (order is pinned by docs/EVAL.md so
+    two result files diff row by row). Tags and notes are excluded: they steer reporting,
+    not grading.
+    """
+    payload = "\n".join(
+        f"{q.id}\x1f{q.question}\x1f{q.cls}\x1f{sorted(q.expect_sources or [])}\x1f{sorted(q.expect_docs)}"
+        for q in questions
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
 def load_questions(path: Path, valid_sources: Iterable[str] = ()) -> list[Question]:
     """Parse and validate the question set, in file order.
 
@@ -569,7 +588,7 @@ def _header(cfg: Config, deps: Deps, questions: Sequence[Question], root: Path) 
         "questions": len(questions),
         "questions_by_class": dict(Counter(q.cls for q in questions)),
         "question_set": str(cfg.eval.question_set),
-        "question_set_sha256": hashlib.sha256(question_set.read_bytes()).hexdigest()[:12],
+        "question_set_sha256": _question_set_digest(questions),
         # The system prompt is an experiment variable like the embedder or chunk size,
         # and it lives in an easily-edited text file. Without this, a prompt tweak
         # changes the numbers with nothing in the record saying so.

@@ -1,13 +1,18 @@
-# The fixed question set — 30 questions, held constant across every phase.
+# The fixed question set — 87 questions, held constant across every phase.
 #
 # ADDING OR REWORDING A QUESTION INVALIDATES COMPARISON WITH EVERY EARLIER RUN
 # (docs/EVAL.md § What makes two runs comparable). Changes land at a phase boundary
-# only, followed by a baseline re-run.
+# only, followed by a baseline re-run. Each run records `question_set_sha256` so two
+# result files can be checked for comparability; the value is not written here,
+# because writing it into the file would change it.
 #
 # Balance (docs/EVAL.md § The question set):
-#   k8s-answerable     12   (40%)
-#   docker-answerable  12   (40%)
-#   should-refuse       6   (20%)
+#   k8s-answerable     33   (38%)
+#   docker-answerable  33   (38%)
+#   should-refuse      21   (24%)
+#
+# How the set was designed, what was deliberately discarded, and why no further
+# cross-source question exists on this corpus: eval/README.md
 #
 # ---------------------------------------------------------------- schema
 #
