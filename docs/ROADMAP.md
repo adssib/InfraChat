@@ -187,13 +187,35 @@ right, and the negative is recorded rather than tuned away.
 window. The question it answers: does hybrid avoid the refusal-recall cost the reranker
 showed? If so, hybrid-only is the better default on both axes.
 
-### What Phases 1-3 tell us about Phase 4
+### Phase 4 — + query rewriter (ADR-0010)
 
-- **Phase 4 (query rewriter) is aimed at paraphrase, now 0.727** — the lowest slice left.
-  It must earn that against the latency of an extra LLM call on every query.
-- **Every stage so far reorders without rescaling** (ADR-0008, ADR-0009), so the gate
-  still reads a dense cosine and `floor` needs no re-derivation. Phase 4 changes the
-  *query*, which changes every cosine — re-run the floor rule after it.
+**Retrieval, all 87 questions, one cached rewrite per question:**
+
+| arm | MRR | paraphrase |
+|---|---|---|
+| reranker (best without rewriting) | 0.867 | 0.727 |
+| dense + rewrite | 0.834 | 0.659 |
+| hybrid + rewrite | 0.814 | 0.764 |
+| reranker + rewrite, reranking the expansion | 0.820 | 0.713 |
+| **dense + rewrite, reranking the original question** | **0.875** | **0.782** |
+
+**Verdict: the rewriter does not ship.** As specified it hurts both of the better
+configurations. Its best variant is +0.008 MRR over the reranker — about one question —
+for an LLM call on every query. Building it exposed two latent pipeline bugs, both fixed:
+the generator's prompt used the rewritten query, and so did the reranker. Rule now: *the
+rewrite steers retrieval; the original question is what gets judged.*
+
+### What four phases add up to
+
+- **Every addition after the first overlapped with the others.** The reranker absorbed most
+  of BM25's exact-term gain; the rewriter duplicates BM25's vocabulary effect. Hybrid
+  (+6 ms) captures 71% of the reranker's gain; the reranker adds the rest at +821 ms;
+  the rewriter adds about one question at an LLM call per query.
+- **Retrieval improved and refusal did not.** The best ranking component (reranker) is also
+  the one that cost refusal recall, by surfacing the most plausible wrong chunk for
+  near-miss questions. The citation gate verifies provenance, not entailment (ADR-0007),
+  so better retrieval gives fabrication a better-looking citation.
+- **The weak point is now measured and named:** the entailment gate.
 
 ### Open
 

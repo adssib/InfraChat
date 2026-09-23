@@ -19,6 +19,7 @@ and add a row below. When a decision changes, write a *new* ADR and mark the old
 | [0007](0007-citation-check-verifies-provenance-not-entailment.md) | The citation check verifies provenance, not entailment — bounds [0001](0001-refuse-over-fabricate.md) | 1 | Accepted |
 | [0008](0008-reranker-orders-dense-scores.md) | The reranker decides order; the dense retriever still decides score | 2 | Accepted |
 | [0009](0009-hybrid-fusion-keeps-cosine-and-substitutes-for-rerank.md) | Hybrid fusion keeps the cosine score, and substitutes for the reranker rather than stacking on it | 3 | Accepted |
+| [0010](0010-query-rewriter-steers-retrieval-and-does-not-ship.md) | The query rewriter steers retrieval only — and does not ship | 4 | Accepted |
 
 **Start with [ADR-0001](0001-refuse-over-fabricate.md)** — it's the decision the rest of the
 system is arranged around.
@@ -39,4 +40,4 @@ measurement or the constraint that settled it.
 | **Two-stage retrieval sizing** — `retrieve_n` = 20, `k` = 5 | Phase 2 | reranker latency vs. the hit-rate/MRR delta |
 | **Fusion method** — reciprocal rank fusion vs. score-weighted | Phase 3 | whether the two arms' scores turn out comparable at all |
 | **Entailment gate** — a third check that each cited chunk actually supports its sentence (ADR-0007's 🔭) | forced after Phase 2 | Phase 2 raised MRR +0.082 but cut refusal recall 0.952 → 0.857: two near-miss refusals became fabrications with **valid** citations, built from chunks the reranker promoted. The citation gate is the measured weak point. |
-| **Whether the query rewriter ships** | Phase 4 | the latency it adds vs. the quality it buys. **If it doesn't earn its place, the ADR records removing it** — with the numbers. |
+| ~~**Whether the query rewriter ships**~~ decided — ADR-0010 | Phase 4 | the latency it adds vs. the quality it buys. **If it doesn't earn its place, the ADR records removing it** — with the numbers. |

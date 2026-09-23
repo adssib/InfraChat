@@ -57,7 +57,10 @@ def retrieve(query: str, cfg: Config, deps: Deps) -> Retrieval:
     """Rewrite → retrieve → rerank → gate. No LLM, no API key."""
     q = deps.rewriter.rewrite(query)
     candidates = deps.retriever.retrieve(q, cfg.retrieval.retrieve_n)
-    hits = deps.reranker.rerank(q, candidates, cfg.retrieval.k)
+    # The rewrite steers RETRIEVAL only. The reranker judges relevance against what the
+    # user asked: measured, reranking against the 15-term expansion dropped MRR to 0.820,
+    # reranking against the original question lifted it to 0.875 (ADR-0010).
+    hits = deps.reranker.rerank(query, candidates, cfg.retrieval.k)
     return Retrieval(query=q, hits=hits, decision=check(hits, cfg.retrieval.floor), question=query)
 
 
