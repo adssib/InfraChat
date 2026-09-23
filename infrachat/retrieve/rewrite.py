@@ -62,4 +62,5 @@ def build(rewrite_cfg, llm_cfg) -> QueryRewriter:
         api_key_env=llm_cfg.api_key_env,
         max_tokens=rewrite_cfg.max_tokens,
         reasoning_effort=rewrite_cfg.reasoning_effort,
+        allow_empty=True,      # 'nothing to add' is a valid rewrite: the query passes unchanged
     ))

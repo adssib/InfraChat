@@ -1,0 +1,442 @@
+{
+ "model": "openai/gpt-oss-20b",
+ "reasoning_effort": "low",
+ "prompt_sha": "23d2991c526d",
+ "queries": {
+  "k8s-pod-basics": {
+   "question": "What is a Pod?",
+   "rewritten": "What is a Pod? Pod Kubernetes APIObject spec containers initContainers volumes labels annotations status podIP podPhase kubelet node namespace podTemplate podController",
+   "ms": 1099
+  },
+  "k8s-crashloopbackoff": {
+   "question": "What does CrashLoopBackOff mean?",
+   "rewritten": "What does CrashLoopBackOff mean? CrashLoopBackOff pod status container restartPolicy kubelet event livenessProbe readinessProbe container exit code pod spec restart count pod lifecycle container runtime Dockerfile instruction image pull policy kubectl describe pod kubectl get events kubectl logs pod name namespace",
+   "ms": 274
+  },
+  "k8s-imagepullpolicy": {
+   "question": "What are the valid values of imagePullPolicy?",
+   "rewritten": "What are the valid values of imagePullPolicy? imagePullPolicy Always Never IfNotPresent PodSpec container Deployment imagePullPolicy field Kubernetes documentation Docker imagePullPolicy values",
+   "ms": 296
+  },
+  "k8s-probes-liveness-vs-readiness": {
+   "question": "What is the difference between a liveness probe and a readiness probe?",
+   "rewritten": "What is the difference between a liveness probe and a readiness probe? livenessProbe readinessProbe podSpec container kubelet healthCheck httpGet tcpSocket exec initialDelaySeconds periodSeconds timeoutSeconds successThreshold failureThreshold readinessGate readinessProbe livenessProbe",
+   "ms": 458
+  },
+  "k8s-noexecute-taint": {
+   "question": "What does the NoExecute taint effect do?",
+   "rewritten": "What does the NoExecute taint effect do? taint effect NoExecute node taint pod toleration effect NoSchedule PreferNoSchedule kubectl taint node pod spec tolerations node taint syntax pod toleration key value effect kubectl get nodes kubectl describe node kubectl delete taint node kubectl apply pod spec tolerations node taint documentation",
+   "ms": 280
+  },
+  "k8s-oom-eviction-order": {
+   "question": "When a node runs out of memory, which pod gets killed first?",
+   "rewritten": "When a node runs out of memory, which pod gets killed first? kubelet memory pressure eviction policy PodPriority PodPriorityClass QoS classes BestEffort Burstable Guaranteed kube-controller-manager eviction thresholds kubelet eviction hard kubelet eviction soft kubelet eviction grace period kube-scheduler pod eviction kubelet eviction logic",
+   "ms": 2375
+  },
+  "k8s-secret-for-db-password": {
+   "question": "How do I store a database password so a container can read it?",
+   "rewritten": "How do I store a database password so a container can read it? secret env var envFrom env secretKeyRef volumeMounts secret type Opaque docker secret create docker run --env-file kubectl create secret generic kubectl apply -f secret data mountPath docker stack deploy kubectl get secret kubectl describe secret kubectl delete secret secretName kubectl edit secret",
+   "ms": 2800
+  },
+  "k8s-pvc-basics": {
+   "question": "What is a PersistentVolumeClaim?",
+   "rewritten": "What is a PersistentVolumeClaim? PersistentVolumeClaim PersistentVolume StorageClass PVC PV accessModes storageClassName capacity reclaimPolicy volumeMode claimRef apiVersion v1 kind PersistentVolumeClaim spec status kubectl get pvc kubectl describe pvc kubectl apply -f pvc.yaml claimStatus volumeName claimRef namespace namespaceSe",
+   "ms": 4936
+  },
+  "k8s-deployment-maxsurge": {
+   "question": "What does maxSurge control during a Deployment rollout?",
+   "rewritten": "What does maxSurge control during a Deployment rollout? Deployment spec strategy RollingUpdate maxSurge maxUnavailable podTemplateSpec replicas kubectl rollout status kubectl rollout undo rollout progress pod readiness probe pod disruption budget pod selector label selector strategy type RollingUpdate pod template spec kubectl rollout history Deployment",
+   "ms": 4906
+  },
+  "k8s-init-vs-sidecar-containers": {
+   "question": "How do init containers differ from sidecar containers?",
+   "rewritten": "How do init containers differ from sidecar containers? initContainers podSpec container lifecycle ordering restartPolicy sidecar container pod spec containerSpec initContainer lifecycle hooks Dockerfile instructions Docker CLI kubectl apply kubectl get pod kubectl describe pod",
+   "ms": 4407
+  },
+  "k8s-anti-affinity-spread": {
+   "question": "How do I stop two copies of the same app from being placed on one node?",
+   "rewritten": "How do I stop two copies of the same app from being placed on one node? podAntiAffinity requiredDuringSchedulingIgnoredDuringExecution topologyKey nodeSelector affinity podSpec deployment replicaSet nodeAffinity podTemplateSpec podSpec nodeSelectorTerms podAffinityTerm weight preferredDuringSchedulingIgnoredDuringExecution kubernetes scheduler pod anti-affinity topology",
+   "ms": 2254
+  },
+  "k8s-service-clusterip": {
+   "question": "What is a Service of type ClusterIP?",
+   "rewritten": "What is a Service of type ClusterIP? Service ClusterIP Service.spec.type Service.spec.clusterIP kubectl get svc kubectl describe svc kube-proxy Service selector Service port targetPort protocol Kubernetes networking Service type ClusterIP service definition",
+   "ms": 1262
+  },
+  "dkr-multi-stage-basics": {
+   "question": "What is a multi-stage build?",
+   "rewritten": "What is a multi-stage build? Dockerfile multi-stage build FROM AS COPY --from Docker build --target Dockerfile syntax Dockerfile stages image layers Dockerfile instructions Dockerfile FROM Dockerfile AS Dockerfile COPY Docker build stages Dockerfile multi-stage build Dockerfile COPY --from Dockerfile AS Dockerfile FROM Dockerfi",
+   "ms": 2775
+  },
+  "dkr-shrink-image": {
+   "question": "My image is 1.5GB. How do I shrink it?",
+   "rewritten": "My image is 1.5GB. How do I shrink it? dockerfile multi-stage build FROM alpine COPY --no-cache RUN apt-get purge -y --auto-remove && rm -rf /var/lib/apt/lists/* docker build --squash docker image prune docker history docker image inspect docker buildx dockerfile best practices dockerfile optimization dockerfile instructions FROM COPY RU",
+   "ms": 4409
+  },
+  "dkr-cache-mount": {
+   "question": "What does --mount=type=cache do in a RUN instruction?",
+   "rewritten": "What does --mount=type=cache do in a RUN instruction? Dockerfile RUN --mount=type=cache target=... source=... docker buildx BuildKit cache directory docker build --mount=type=cache dockerfile syntax build cache mount instruction target source",
+   "ms": 2778
+  },
+  "dkr-build-secret": {
+   "question": "How do I pass a secret to a build without baking it into the image?",
+   "rewritten": "How do I pass a secret to a build without baking it into the image? docker build docker buildx dockerfile RUN --mount=type=secret id= src= docker build --secret id= src= docker buildx build --secret id= src= BuildKit secrets",
+   "ms": 1005
+  },
+  "dkr-arg-vs-env": {
+   "question": "What is the difference between ARG and ENV in a Dockerfile?",
+   "rewritten": "What is the difference between ARG and ENV in a Dockerfile? ARG ENV Dockerfile build-time runtime environment variable build argument image layer Docker build Dockerfile instruction",
+   "ms": 414
+  },
+  "dkr-bake-inheritance": {
+   "question": "How do I inherit from another target in a bake file?",
+   "rewritten": "How do I inherit from another target in a bake file? docker-bake docker buildx bake target inherits dockerfile FROM ARG ENV --target --file --output --set --load --push",
+   "ms": 4428
+  },
+  "dkr-multi-platform": {
+   "question": "How do I build an image for both arm64 and amd64?",
+   "rewritten": "How do I build an image for both arm64 and amd64? docker buildx build --platform linux/amd64,linux/arm64 --push --load Dockerfile --output type=registry --tag myimage:latest dockerfile multi-platform buildx dockerfile instructions dockerfile target dockerfile arch dockerfile baseimage dockerfile FROM amd64 FROM arm64 dockerfile syntax dockerfile bu",
+   "ms": 1390
+  },
+  "dkr-cache-mode-max": {
+   "question": "What does mode=max mean for a cache export?",
+   "rewritten": "What does mode=max mean for a cache export? docker buildx cache export --mode max --export-cache --cache-to --cache-from BuildKit cache export mode max Dockerfile instruction cache export mode max BuildKit cache export syntax",
+   "ms": 4385
+  },
+  "dkr-driver-difference": {
+   "question": "What is the difference between the docker and docker-container driver?",
+   "rewritten": "What is the difference between the docker and docker-container driver? docker docker-container driver containerd Docker Engine Docker CLI Docker API Docker daemon Docker Compose Docker Swarm Docker Desktop concept names API object field names CLI commands flags",
+   "ms": 7326
+  },
+  "dkr-build-inside-k8s": {
+   "question": "How do I build container images inside a Kubernetes cluster?",
+   "rewritten": "How do I build container images inside a Kubernetes cluster? kubectl build kaniko buildah Dockerfile pod container image imagePullPolicy imagePullSecrets imageRegistry cluster buildkit containerRuntime imagePullPolicy",
+   "ms": 303
+  },
+  "dkr-cache-layer-ordering": {
+   "question": "How do I stop pip install from running again every time I change my source code?",
+   "rewritten": "How do I stop pip install from running again every time I change my source code? pip install -r requirements.txt virtualenv requirements.txt Dockerfile COPY RUN pip install Docker build cache Dockerfile --mount=type=cache Docker Compose volumes hot reload Dockerfile CMD Dockerfile ENTRYPOINT Dockerfile ARG Dockerfile ENV Dockerfile VOLUME",
+   "ms": 1363
+  },
+  "dkr-gpu-access": {
+   "question": "How do I give a container access to a GPU?",
+   "rewritten": "How do I give a container access to a GPU? nvidia.com/gpu resource requests limits nodeSelector device plugin pod spec container runtime NVIDIA Container Toolkit nvidia-docker --gpus flag Dockerfile GPU device driver node affinity pod affinity GPU passthrough Kubernetes GPU support device plugin API resource field names",
+   "ms": 190
+  },
+  "refuse-sourdough-bake": {
+   "question": "How do I bake sourdough bread?",
+   "rewritten": "How do I bake sourdough bread?",
+   "ms": 1173
+  },
+  "refuse-podman-rootless": {
+   "question": "How does Podman rootless networking work?",
+   "rewritten": "How does Podman rootless networking work? podman rootless slirp4netns userns CNI podman network create podman network inspect podman network ls podman network rm podman network connect podman network disconnect podman network prune podman network attach podman network detach podman network set",
+   "ms": 529
+  },
+  "refuse-compose-run-app": {
+   "question": "How do I write a docker-compose.yml to run my web app and database together?",
+   "rewritten": "How do I write a docker-compose.yml to run my web app and database together? docker-compose docker-compose.yml services build image depends_on ports environment volumes networks docker-compose up docker-compose down docker-compose config docker-compose ps",
+   "ms": 296
+  },
+  "refuse-kubeadm-upgrade": {
+   "question": "How do I upgrade a cluster with kubeadm?",
+   "rewritten": "How do I upgrade a cluster with kubeadm? kubeadm upgrade plan kubeadm upgrade apply kubeadm upgrade node kubeadm upgrade node --ignore-preflight-errors kubeadm upgrade node --config kubeadm upgrade node --force kubeadm upgrade node --dry-run kubeadm upgrade node --kubeconfig kubeadm upgrade node --kubelet-version kubeadm upgrade node --ima",
+   "ms": 1169
+  },
+  "refuse-dockerhub-rate-limits": {
+   "question": "What are the Docker Hub image pull rate limits?",
+   "rewritten": "What are the Docker Hub image pull rate limits? Docker Hub rate limits image pull Docker Hub free tier Docker Hub paid tier Docker Hub authentication Docker Hub token Docker Hub API v2 Docker Hub rate limit headers Docker Hub rate limit reset Docker Hub rate limit status Docker CLI pull Docker pull rate limit policy Docker Hub documentation",
+   "ms": 7103
+  },
+  "refuse-capital-of-france": {
+   "question": "What is the capital of France?",
+   "rewritten": "What is the capital of France?",
+   "ms": 240
+  },
+  "k8s-replicaset-basics": {
+   "question": "What is a ReplicaSet?",
+   "rewritten": "What is a ReplicaSet? ReplicaSet apps/v1 ReplicaSetSpec replicas selector.matchLabels pod template spec kubectl get rs kubectl describe rs scale Deployment rolling update label selector pod spec API version apps/v1 pod template metadata labels pod spec containers image ports env volumeMounts readinessProbe livenessProbe",
+   "ms": 441
+  },
+  "k8s-restart-policy-values": {
+   "question": "What values can restartPolicy have for a Pod?",
+   "rewritten": "What values can restartPolicy have for a Pod? restartPolicy Pod spec Always OnFailure Never Kubernetes Pod restartPolicy values",
+   "ms": 4554
+  },
+  "k8s-job-indexed-completion": {
+   "question": "What does completionMode Indexed do for a Job?",
+   "rewritten": "What does completionMode Indexed do for a Job? Job completionMode Indexed parallelism completions podTemplate podSpec podTemplateSpec podTemplateMetadata podName podIndex podStatus podTemplateSpecContainers podTemplateSpecRestartPolicy",
+   "ms": 766
+  },
+  "k8s-cronjob-concurrency-policy": {
+   "question": "What is the difference between the Forbid and Replace concurrencyPolicy in a CronJob?",
+   "rewritten": "What is the difference between the Forbid and Replace concurrencyPolicy in a CronJob? CronJob spec.concurrencyPolicy Forbid Replace kubernetes.io/api cronjob concurrencyPolicy kubectl get cronjob kubectl describe cronjob kubectl edit cronjob kubectl apply cronjob YAML cronjob spec concurrencyPolicy documentation Kubernetes API reference cronjob concurrencyPolicy Forbid Replace concep",
+   "ms": 1259
+  },
+  "k8s-hpa-stabilization-window": {
+   "question": "What does stabilizationWindowSeconds do in a HorizontalPodAutoscaler?",
+   "rewritten": "What does stabilizationWindowSeconds do in a HorizontalPodAutoscaler? HorizontalPodAutoscaler stabilizationWindowSeconds API field autoscaling/v2beta2 metrics targetCPUUtilizationPercentage behavior scaleUp scaleDown cooldownPeriod minReplicas maxReplicas podTemplateSpec scaleTargetRef k8s.io/api/autoscaling/v2beta2 HorizontalPodAutoscalerSpec HorizontalPodAutoscalerS",
+   "ms": 2419
+  },
+  "k8s-nodeselector-placement": {
+   "question": "What does nodeSelector do?",
+   "rewritten": "What does nodeSelector do? nodeSelector PodSpec field NodeSelectorRequirement NodeSelectorTerm NodeSelectorLabel NodeAffinity PodAffinity kubectl apply kubectl get pods kubectl describe node kubernetes API node selector syntax node selector example node selector documentation",
+   "ms": 4213
+  },
+  "k8s-daemonset-per-node": {
+   "question": "How do I make sure exactly one log collector pod runs on every node?",
+   "rewritten": "How do I make sure exactly one log collector pod runs on every node? DaemonSet podSpec.nodeSelector podSpec.affinity podSpec.tolerations podSpec.nodeAffinity podSpec.toleration podSpec.toleration.key podSpec.toleration.value podSpec.toleration.effect podSpec.toleration.operator podSpec.toleration.tolerationSeconds podTemplateSpec podSpec podAntiAffinity nodeAffinity",
+   "ms": 570
+  },
+  "k8s-autoscale-on-traffic": {
+   "question": "How do I make my application run more copies automatically when traffic increases?",
+   "rewritten": "How do I make my application run more copies automatically when traffic increases? HorizontalPodAutoscaler CPUUtilization custom-metrics scale replicas Deployment kubectl scale autoscaling API cluster-autoscaler node-autoscaling metrics-server scaling-policy",
+   "ms": 6094
+  },
+  "k8s-init-container-wait": {
+   "question": "How do I wait for a database to be ready before my application container starts?",
+   "rewritten": "How do I wait for a database to be ready before my application container starts? readinessProbe startupProbe initContainer healthCheck Dockerfile CMD Dockerfile ENTRYPOINT docker-compose healthcheck depends_on wait-for-it.sh wait-for-it docker run --init container lifecycle Kubernetes pod readinessProbe startupProbe initContainer Dockerfile ENTRYPOINT CMD docker-compose healthch",
+   "ms": 1268
+  },
+  "k8s-toleration-dedicated-node": {
+   "question": "How do I allow a pod to be scheduled onto a node that most other pods are kept away from?",
+   "rewritten": "How do I allow a pod to be scheduled onto a node that most other pods are kept away from? nodeSelector podAffinity podAntiAffinity nodeAffinity requiredDuringSchedulingIgnoredDuringExecution tolerations pod.spec.tolerations node.taints kubectl taint node kubectl get nodes kubectl describe node pod.spec.affinity kubectl apply kubectl get pods pod.spec.affinity.nodeAffinity pod.spec.affini",
+   "ms": 3357
+  },
+  "refuse-keda-scaledobject": {
+   "question": "What is a KEDA ScaledObject?",
+   "rewritten": "What is a KEDA ScaledObject? KEDA ScaledObject CustomResourceDefinition autoscaling trigger deployment pod minReplicaCount maxReplicaCount pollingInterval cooldownPeriod triggerMetadata triggerAuthentication scaleTargetRef metrics KEDA operator Kubernetes API scaling KEDA trigger types",
+   "ms": 9600
+  },
+  "k8s-service-nodeport-vs-loadbalancer": {
+   "question": "What is the difference between a NodePort and a LoadBalancer Service?",
+   "rewritten": "What is the difference between a NodePort and a LoadBalancer Service? NodePort Service LoadBalancer Service type ClusterIP Service.spec.type Service.spec.ports ExternalTrafficPolicy NodePort range LoadBalancerSourceRanges Ingress ExternalName ServiceAccount Kubernetes API kubectl get svc kubectl expose service<|channel|>",
+   "ms": 4755
+  },
+  "k8s-ingress-path-routing": {
+   "question": "How do I route requests for different URL paths to different backends?",
+   "rewritten": "How do I route requests for different URL paths to different backends? Ingress IngressRule path backend serviceName servicePort pathType IngressSpec IngressBackend IngressClass IngressClassName nginx-ingress-controller URL path routing path matching IngressPath IngressPathType ServicePort PathType PathTypePrefix PathTypeExact PathTypeImplementationSpecific ServiceName",
+   "ms": 1271
+  },
+  "k8s-networkpolicy-default-allow": {
+   "question": "By default, can any pod in the cluster send traffic to any other pod?",
+   "rewritten": "By default, can any pod in the cluster send traffic to any other pod? networkpolicy pod-to-pod communication default deny allow all kube-proxy CNI cluster networking pod network service clusterIP DNS",
+   "ms": 257
+  },
+  "k8s-dns-resolv-conf-search": {
+   "question": "What does the search line in a pod's resolv.conf contain?",
+   "rewritten": "What does the search line in a pod's resolv.conf contain? resolv.conf pod DNSPolicy DNSConfig searchDomains clusterDomain kube-dns CoreDNS podSpec DNSPolicy field DNSConfig field search field clusterDomain field serviceClusterIP field dnsPolicy field dnsConfig field search field resolv.conf field pod field kubelet field kube-proxy field kubelet config file",
+   "ms": 2461
+  },
+  "k8s-pv-access-mode-readwriteonce": {
+   "question": "What does the ReadWriteOnce access mode mean?",
+   "rewritten": "What does the ReadWriteOnce access mode mean? PersistentVolume PersistentVolumeClaim accessModes ReadWriteOnce ReadOnlyMany ReadWriteMany storageClass volumeMode volumeBindingMode kubectl get pv kubectl get pvc CSI volume plugin RWO",
+   "ms": 9434
+  },
+  "k8s-storageclass-volumebindingmode": {
+   "question": "What does volumeBindingMode WaitForFirstConsumer do?",
+   "rewritten": "What does volumeBindingMode WaitForFirstConsumer do? PersistentVolumeClaim volumeBindingMode WaitForFirstConsumer StatefulSet pod scheduling dynamic provisioning volume binding mode enum pod affinity volume expansion pod scheduling policy volume binding field concept name Kubernetes API object field name terminology",
+   "ms": 215
+  },
+  "k8s-configmap-size-limit": {
+   "question": "What is the maximum size of a ConfigMap?",
+   "rewritten": "What is the maximum size of a ConfigMap? ConfigMap size limit API limit ConfigMap quota resourceQuota limitRange maxConfigMapSize kubectl get configmap kubectl describe configmap kubectl explain configmap metadata.data kubectl apply configmap kubectl delete configmap kubectl edit configmap kubectl create configmap kubectl patch configmap k",
+   "ms": 4336
+  },
+  "k8s-imagepullsecrets": {
+   "question": "What is imagePullSecrets used for?",
+   "rewritten": "What is imagePullSecrets used for? imagePullSecrets Secret docker-registry kubernetes.io/dockerconfigjson PodSpec imagePullPolicy kubectl create secret docker-registry ServiceAccount Deployment imagePullSecrets field registry authentication Dockerfile FROM",
+   "ms": 7561
+  },
+  "k8s-container-memory-limit": {
+   "question": "How do I limit how much memory a container is allowed to use?",
+   "rewritten": "How do I limit how much memory a container is allowed to use? memory limits memory requests limits.memory requests.memory kubelet resourceQuota limitRange pod spec container spec docker run --memory docker run --memory-swap docker-compose memory_limit memoryReservation memorySwap memoryLimit memoryRequest",
+   "ms": 328
+  },
+  "k8s-securitycontext-runasnonroot": {
+   "question": "What does runAsNonRoot do in a securityContext?",
+   "rewritten": "What does runAsNonRoot do in a securityContext? securityContext runAsNonRoot PodSecurityContext ContainerSecurityContext runAsUser runAsGroup privileged capabilities SELinuxOptions AppArmorProfile SeccompProfile readOnlyRootFilesystem allowPrivilegeEscalation PodSecurityPolicy",
+   "ms": 292
+  },
+  "k8s-serviceaccount-rbac-permissions": {
+   "question": "How do I configure RBAC permissions for a service account?",
+   "rewritten": "How do I configure RBAC permissions for a service account? ServiceAccount Role ClusterRole RoleBinding ClusterRoleBinding rbac.authorization.k8s.io/v1 apiVersion kind subjects namespace verbs resources apiGroups resourceNames kubectl create role kubectl create rolebinding",
+   "ms": 337
+  },
+  "refuse-rbac-role-vs-clusterrole": {
+   "question": "What is the difference between a Role and a ClusterRole?",
+   "rewritten": "What is the difference between a Role and a ClusterRole? Role ClusterRole RoleBinding ClusterRoleBinding RBAC namespace cluster-scoped resource verbs APIGroup scope subjects permissions API v1.",
+   "ms": 2301
+  },
+  "refuse-nginx-ingress-annotations": {
+   "question": "What annotations does the NGINX ingress controller support?",
+   "rewritten": "What annotations does the NGINX ingress controller support? ingress nginx.ingress.kubernetes.io annotation ingress-controller annotations nginx ingress controller annotation list ingress annotations nginx.ingress.kubernetes.io/ssl-redirect nginx.ingress.kubernetes.io/rewrite-target nginx.ingress.kubernetes.io/whitelist-source-range nginx.ingress.kubernetes.i",
+   "ms": 1515
+  },
+  "dkr-build-context-basics": {
+   "question": "What is the build context?",
+   "rewritten": "What is the build context? Dockerfile build context directory .dockerignore docker build --file docker build --target docker build --build-arg docker context docker context create docker context use docker build --no-cache docker build --pull docker build --rm docker build --progress=plain",
+   "ms": 9319
+  },
+  "dkr-dockerignore-purpose": {
+   "question": "What is a .dockerignore file for?",
+   "rewritten": "What is a .dockerignore file for? docker build .dockerignore syntax ignore patterns Dockerfile build context Docker CLI docker build ignore file Dockerfile instructions context exclusion Dockerfile ignore file usage",
+   "ms": 2302
+  },
+  "dkr-copy-from-stage": {
+   "question": "What does COPY --from do in a Dockerfile?",
+   "rewritten": "What does COPY --from do in a Dockerfile? COPY --from FROM Dockerfile multi-stage build build stage source target image build context instruction",
+   "ms": 1176
+  },
+  "dkr-add-vs-copy": {
+   "question": "What is the difference between ADD and COPY?",
+   "rewritten": "What is the difference between ADD and COPY? Dockerfile ADD Dockerfile COPY Dockerfile instructions Dockerfile syntax Dockerfile context Dockerfile build context Dockerfile remote URL Dockerfile tar extraction Dockerfile file copy Dockerfile documentation Dockerfile build Dockerfile build process",
+   "ms": 2444
+  },
+  "dkr-syntax-directive": {
+   "question": "What does the syntax directive at the top of a Dockerfile do?",
+   "rewritten": "What does the syntax directive at the top of a Dockerfile do? Dockerfile syntax Dockerfile syntax directive Dockerfile syntax version Dockerfile syntax Dockerfile",
+   "ms": 342
+  },
+  "dkr-default-command": {
+   "question": "How do I make my image run a command by default when someone starts it?",
+   "rewritten": "How do I make my image run a command by default when someone starts it? Dockerfile CMD ENTRYPOINT docker run docker build image default command run container",
+   "ms": 4215
+  },
+  "dkr-image-layers": {
+   "question": "What is an image layer and what creates one?",
+   "rewritten": "What is an image layer and what creates one? image layer Dockerfile instruction COPY ADD RUN FROM image build layer caching image manifest Dockerfile Docker build image layers concept names API object field names CLI commands flags",
+   "ms": 1370
+  },
+  "dkr-minimal-scratch-image": {
+   "question": "Can I build an image that contains nothing but my compiled program?",
+   "rewritten": "Can I build an image that contains nothing but my compiled program? Dockerfile FROM scratch CMD ENTRYPOINT COPY RUN docker build docker image minimal image multi-stage build alpine distroless OCI image container runtime container image layers",
+   "ms": 1443
+  },
+  "dkr-targetplatform-arg": {
+   "question": "What is TARGETPLATFORM?",
+   "rewritten": "What is TARGETPLATFORM? BuildKit ARG TARGETPLATFORM FROM --platform docker build --platform docker buildx dockerfile multi-arch platform Dockerfile ARG instruction Dockerfile FROM instruction Dockerfile platform flag Dockerfile buildx multi-arch buildx build docker buildx buildx buildx docker buildx buildx docker buildx bu",
+   "ms": 3446
+  },
+  "dkr-build-checks-warnings": {
+   "question": "Why is my build printing warnings about my Dockerfile?",
+   "rewritten": "Why is my build printing warnings about my Dockerfile? Dockerfile syntax errors Dockerfile instructions docker build docker build --no-cache docker build --progress=plain docker build --quiet docker build --file docker build --target docker build --build-arg docker build --network docker build --shm-size docker build --memory docker build --cpus docker",
+   "ms": 7718
+  },
+  "dkr-gc-reserved-space": {
+   "question": "What does reservedSpace do in BuildKit garbage collection?",
+   "rewritten": "What does reservedSpace do in BuildKit garbage collection? BuildKit garbage collection reservedSpace BuildKit API BuildKit daemon BuildKit config docker buildx --gc --max-reclaim --reserved-space cache pruning cache eviction BuildKit cache size BuildKit build cache BuildKit CLI BuildKit build cache cleanup BuildKit cache eviction policy",
+   "ms": 2318
+  },
+  "dkr-inline-cache-build-arg": {
+   "question": "How do I set BUILDKIT_INLINE_CACHE=1?",
+   "rewritten": "How do I set BUILDKIT_INLINE_CACHE=1? docker build docker buildx DOCKER_BUILDKIT BUILDKIT_INLINE_CACHE --build-arg --cache-from --cache-to Dockerfile BuildKit inline-cache dockerfile instruction dockerfile syntax dockerfile build-arg dockerfile buildx buildx buildx buildx buildx buildx buildx buildx buildx buildx buildx buildx buildx bu",
+   "ms": 3311
+  },
+  "dkr-cache-gha-backend": {
+   "question": "What does cache-to type=gha do in a GitHub Actions workflow?",
+   "rewritten": "What does cache-to type=gha do in a GitHub Actions workflow? actions/cache cache-to gha cache-from Docker Buildx buildx build --cache-to --cache-from cache key cache hit cache miss GHA cache type concept names Dockerfile instructions CLI commands flags",
+   "ms": 3435
+  },
+  "dkr-cache-registry-backend": {
+   "question": "How do I export build cache to a registry with type=registry?",
+   "rewritten": "How do I export build cache to a registry with type=registry? docker buildx build --cache-to type=registry --cache-from type=registry registry docker buildx create docker buildx inspect docker buildx prune Dockerfile docker buildx push docker buildx buildx use docker buildx ls docker buildx rm docker buildx buildx build docker buildx buildx buildx buildx build",
+   "ms": 2384
+  },
+  "dkr-ci-cold-cache": {
+   "question": "My GitHub Actions build starts cold every time and nothing is reused between runs. What do I add?",
+   "rewritten": "My GitHub Actions build starts cold every time and nothing is reused between runs. What do I add? GitHub Actions workflow cache actions/setup-node actions/setup-python actions/cache restore-keys key paths concurrency matrix artifacts actions/upload-artifact actions/download-artifact Dockerfile buildx cache-from cache-to buildkit runner self-hosted runner",
+   "ms": 9597
+  },
+  "dkr-provenance-mode-max": {
+   "question": "What does mode=max mean for a provenance attestation?",
+   "rewritten": "What does mode=max mean for a provenance attestation? provenance attestation mode max provenance attestation spec mode field attestation format provenance schema attestation API documentation max value concept name",
+   "ms": 1404
+  },
+  "dkr-sbom-inspect": {
+   "question": "How do I find out which packages are inside the image I just built?",
+   "rewritten": "How do I find out which packages are inside the image I just built? docker image inspect docker history docker run --rm docker exec apt-get list --installed dpkg -l rpm -qa yum list installed dockerfile RUN apt-get install dockerfile RUN yum install dockerfile RUN apk add dockerfile RUN pacman -Qi dockerfile CMD dockerfile ENTRYPOINT dockerfile FROM dockerfile IMAGE",
+   "ms": 3223
+  },
+  "dkr-exporter-local-vs-tar": {
+   "question": "What is the difference between the local and tar exporters?",
+   "rewritten": "What is the difference between the local and tar exporters? local_exporter tar_exporter prometheus node_exporter containerd docker metrics exporter local tar",
+   "ms": 7403
+  },
+  "dkr-buildkit-syntax-frontend": {
+   "question": "How do I pin the Dockerfile frontend version with BUILDKIT_SYNTAX?",
+   "rewritten": "How do I pin the Dockerfile frontend version with BUILDKIT_SYNTAX? Dockerfile BUILDKIT_SYNTAX syntax dockerfile syntax version dockerfile syntax reference docker build --build-arg syntax= dockerfile syntax pinning dockerfile instruction syntax= docker buildx build syntax= dockerfile syntax version pinning dockerfile syntax reference dockerfile syntax docs",
+   "ms": 2652
+  },
+  "dkr-bake-file-formats": {
+   "question": "What file formats can a bake file be written in?",
+   "rewritten": "What file formats can a bake file be written in? docker-bake.hcl docker-bake.json dockerfile docker-compose.yml buildkit buildx bake dockerfile syntax dockerfile-extensions dockerfile-variables dockerfile-args dockerfile-mounts dockerfile-commands dockerfile-include dockerfile-extend",
+   "ms": 1313
+  },
+  "dkr-bake-override-tags": {
+   "question": "How do I override the tags of a bake target from the command line?",
+   "rewritten": "How do I override the tags of a bake target from the command line? docker buildx bake --set --output type=docker name= --file --target tags",
+   "ms": 2350
+  },
+  "refuse-gitlab-ci": {
+   "question": "How do I set up a GitLab CI pipeline to build and push my image?",
+   "rewritten": "How do I set up a GitLab CI pipeline to build and push my image? gitlab-ci.yml stages build push image docker build docker push docker login registry variables before_script script CI/CD Dockerfile",
+   "ms": 857
+  },
+  "refuse-docker-named-volume": {
+   "question": "How do I create a Docker named volume and mount it into a container so my Postgres data survives a restart?",
+   "rewritten": "How do I create a Docker named volume and mount it into a container so my Postgres data survives a restart? docker volume create docker run -v docker run --name docker run --restart unless-stopped postgres /var/lib/postgresql/data docker-compose volumes docker volume inspect docker volume prune",
+   "ms": 3351
+  },
+  "refuse-docker-bridge-dns": {
+   "question": "How do I put two containers on the same user-defined bridge network so they can reach each other by name?",
+   "rewritten": "How do I put two containers on the same user-defined bridge network so they can reach each other by name? docker network create --driver bridge --subnet 172.18.0.0/16 mynet docker run --name container1 --network mynet docker run --name container2 --network mynet docker network connect mynet container1 docker network connect mynet container2 docker network inspect mynet docker network ls docker run --net",
+   "ms": 1204
+  },
+  "refuse-docker-run-restart": {
+   "question": "What are the valid values of the docker run --restart flag?",
+   "rewritten": "What are the valid values of the docker run --restart flag? docker run --restart no on-failure always unless-stopped restart-policy docker restart policy documentation Dockerfile RUN instruction not relevant but include docker restart command docker container restart policy options docker container run restart flag documentation Kubernetes restartPolicy Neve",
+   "ms": 11624
+  },
+  "refuse-swarm-scale-service": {
+   "question": "How do I scale a service to five replicas in Docker Swarm?",
+   "rewritten": "How do I scale a service to five replicas in Docker Swarm? docker service create docker service update --replicas docker stack deploy docker-compose swarm replicas service scale node ls docker service ps docker stack services docker stack rm docker stack deploy --compose-file docker-compose.yml docker service inspect docker service ls docker node ps docker",
+   "ms": 7319
+  },
+  "refuse-docker-desktop-wsl2": {
+   "question": "How do I install Docker Desktop on Windows with the WSL 2 backend?",
+   "rewritten": "How do I install Docker Desktop on Windows with the WSL 2 backend? Docker Desktop Windows WSL 2 backend install Docker Desktop installation guide WSL integration Docker Desktop WSL 2 integration Docker Desktop Windows installation Docker Desktop WSL 2 setup Docker Desktop WSL 2 backend Docker Desktop WSL 2 install Docker Desktop Windows WSL 2 Docker Desktop WSL 2 i",
+   "ms": 8523
+  },
+  "refuse-etcd-backup-restore": {
+   "question": "How do I back up and restore the etcd datastore of my cluster?",
+   "rewritten": "How do I back up and restore the etcd datastore of my cluster? etcdctl snapshot save etcdctl snapshot restore etcdctl --endpoints etcdctl --cacert etcdctl --cert etcdctl --key etcdctl --data-dir etcdctl --name etcdctl --peer-urls etcdctl --config etcdctl --version etcdctl snapshot status etcdctl member list etcdctl member add etcdctl member remove",
+   "ms": 2408
+  },
+  "refuse-control-plane-sizing": {
+   "question": "What are the minimum CPU and memory requirements to run the Kubernetes control plane on a Linux node?",
+   "rewritten": "What are the minimum CPU and memory requirements to run the Kubernetes control plane on a Linux node? kube-apiserver kube-controller-manager kube-scheduler kube-scheduler kube-controller-manager kube-apiserver kube-system namespace kubelet resource requests resource limits CPU memory node requirements Linux node minimum CPU memory requirements Kubernetes control plane components documentation",
+   "ms": 2358
+  },
+  "refuse-helm-values-override": {
+   "question": "How do I override the image tag in a Helm chart's values file?",
+   "rewritten": "How do I override the image tag in a Helm chart's values file? helm values.yaml image.tag helm install --set image.tag helm upgrade --set image.tag chart.yaml image.repository image.pullPolicy templates .Values.image.tag helm template",
+   "ms": 2412
+  },
+  "refuse-gitlab-ci-pipeline": {
+   "question": "How do I write a GitLab CI pipeline that builds and pushes a Docker image?",
+   "rewritten": "How do I write a GitLab CI pipeline that builds and pushes a Docker image? gitlab-ci.yml dockerfile docker build docker push image tag registry CI_JOB_TOKEN docker login docker image dockerfile instruction CI pipeline build push",
+   "ms": 1618
+  },
+  "refuse-terraform-namespace": {
+   "question": "How do I create a Kubernetes namespace with the Terraform kubernetes provider?",
+   "rewritten": "How do I create a Kubernetes namespace with the Terraform kubernetes provider? terraform kubernetes provider resource kubernetes_namespace metadata name provider kubernetes terraform docs kubernetes_namespace.metadata.name kubernetes_namespace.metadata.labels kubernetes_namespace.metadata.annotations kubernetes_namespace.spec kubernetes_namespace.metadata.namespace terraform i",
+   "ms": 2205
+  },
+  "refuse-ecr-login": {
+   "question": "How do I push an image to Amazon ECR and authenticate with the AWS CLI?",
+   "rewritten": "How do I push an image to Amazon ECR and authenticate with the AWS CLI? aws ecr get-login-password docker login aws ecr create-repository docker tag docker push aws configure aws ecr describe-repositories aws ecr get-login",
+   "ms": 2383
+  }
+ }
+}

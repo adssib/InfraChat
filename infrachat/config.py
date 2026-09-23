@@ -92,7 +92,7 @@ class RewriteConfig(BaseModel):
     enabled: bool = False
     model: str = "openai/gpt-oss-20b"
     reasoning_effort: str | None = "low"
-    max_tokens: int = 512
+    max_tokens: int = 1024      # low effort still reasoned 1,841 chars on one question
 
 
 class EmbedderConfig(BaseModel):

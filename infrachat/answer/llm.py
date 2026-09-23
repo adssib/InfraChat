@@ -43,6 +43,7 @@ class OpenAICompatClient:
         timeout: float = 60.0,
         max_retries: int = 6,
         reasoning_effort: str | None = None,
+        allow_empty: bool = False,
     ) -> None:
         self.base_url = base_url
         self.model = model
@@ -51,6 +52,7 @@ class OpenAICompatClient:
         self.timeout = timeout
         self.max_retries = max_retries
         self.reasoning_effort = reasoning_effort
+        self.allow_empty = allow_empty
         self._client = None
 
     def _key(self) -> str:
@@ -110,6 +112,10 @@ class OpenAICompatClient:
 
         choice = response.choices[0]
         text = choice.message.content or ""
+        # A rewriter may legitimately have nothing to add and stop cleanly with empty
+        # content; truncation (finish_reason='length') is a failure for every caller.
+        if not text.strip() and self.allow_empty and choice.finish_reason != "length":
+            return ""
         if not text.strip():
             # Reasoning models spend `max_tokens` on hidden reasoning first; when the
             # budget runs out `content` is empty. Returning "" would sail into the
