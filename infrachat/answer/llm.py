@@ -41,12 +41,14 @@ class OpenAICompatClient:
         *,
         max_tokens: int = 4096,
         timeout: float = 60.0,
+        max_retries: int = 6,
     ) -> None:
         self.base_url = base_url
         self.model = model
         self.api_key_env = api_key_env
         self.max_tokens = max_tokens
         self.timeout = timeout
+        self.max_retries = max_retries
         self._client = None
 
     def _key(self) -> str:
@@ -63,8 +65,13 @@ class OpenAICompatClient:
         if self._client is None:
             from openai import OpenAI  # imported lazily: `ingest` must not need it
 
+            # max_retries: the SDK retries 429s with exponential backoff and honours
+            # Retry-After. A full eval run is ~87 calls back to back, which exhausts a
+            # free tier's tokens-per-minute budget partway through — and a rate-limited
+            # question is recorded as an error, which invalidates the whole run for
+            # comparison. Retrying is cheaper than re-running 87 questions.
             self._client = OpenAI(base_url=self.base_url, api_key=self._key(),
-                                  timeout=self.timeout)
+                                  timeout=self.timeout, max_retries=self.max_retries)
         return self._client
 
     def complete(self, system: str, user: str) -> str:
