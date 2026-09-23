@@ -71,10 +71,21 @@ def parse_tag_candidates(text: str) -> list[str]:
     `verify` has already dropped the invented one.
     """
     seen: dict[str, None] = {}
-    for span in _BRACKETED.findall(text):
+    for span in _BRACKETED.findall(_strip_code(text)):
         for cand in _TAG_SHAPED.findall(span):
             seen.setdefault(cand, None)
     return list(seen)
+
+
+#: Fenced blocks and inline code. A citation never lives inside code, but code is full of
+#: bracketed `name:value` shapes — `tags = ["docker.io/username/myapp:release"]` in HCL
+#: was scored as an invented citation `myapp:release`, dropping citation validity on an
+#: answer whose only real citation was valid.
+_CODE = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
+
+
+def _strip_code(text: str) -> str:
+    return _CODE.sub(" ", text)
 
 
 def _said_not_in_docs(text: str) -> bool:

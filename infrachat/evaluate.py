@@ -60,7 +60,7 @@ from infrachat.answer.prompt import SYSTEM_PROMPT_SHA
 from infrachat.answer.prompt import offered_tags
 from infrachat.config import Config
 from infrachat.models import Answer
-from infrachat.pipeline import Deps, Retrieval, answer_query, retrieve
+from infrachat.pipeline import answer_from, Deps, Retrieval, answer_query, retrieve
 
 #: The three classes from docs/EVAL.md § The question set. A fourth would change what the
 #: ratios mean, so an unknown class is an error rather than an extra bucket.
@@ -208,9 +208,11 @@ class _CountingLLM:
     def __init__(self, inner: Any) -> None:
         self._inner = inner
         self.calls: list[dict[str, int]] = []
+        self.last: str | None = None
 
     def complete(self, system: str, user: str) -> str:
         text = self._inner.complete(system, user)
+        self.last = text
         self.calls.append(
             {
                 "prompt_chars": len(system) + len(user),
@@ -270,6 +272,12 @@ class Result:
     #: the 30-question run meant re-running the question, which returned a *different*
     #: answer (temperature=0 is not a determinism guarantee across a provider's batching).
     answer_text: str | None = None
+    #: What the model actually returned, kept only for gate-2 refusals — the one case
+    #: where it differs from `answer_text`, which then holds the refusal message. Without
+    #: it a refusal is undiagnosable: `NOT_IN_DOCS` (the model judged the excerpts
+    #: insufficient) and an uncited answer (a formatting failure) need different fixes, and
+    #: 22 of 24 baseline refusals came from this gate.
+    raw_completion: str | None = None
     latency_ms: float | None = None
     retrieval_ms: float | None = None
     llm_calls: int | None = None
@@ -362,12 +370,18 @@ def _evaluate_one(q: Question, cfg: Config, deps: Deps, counter: _CountingLLM | 
         res.latency_ms = res.retrieval_ms      # retrieval-only: the whole query is this
         return res
 
+    # answer_from reuses the Retrieval just scored rather than retrieving again: one
+    # retrieval per question (a reranker costs ~1s each), and the chunks that were scored
+    # are guaranteed to be the chunks that were answered from.
     t1 = time.perf_counter()
-    answer = answer_query(q.question, cfg, deps)
-    res.latency_ms = round((time.perf_counter() - t1) * 1000, 1)
+    answer = answer_from(r, cfg, deps)
+    res.latency_ms = round(res.retrieval_ms + (time.perf_counter() - t1) * 1000, 1)
     _score_answer(q, r, answer, cfg, res)
 
     if counter is not None:
+        if res.refused_by == "citation":
+            res.raw_completion = counter.last
+        counter.last = None
         res.__dict__.update(counter.drain())
     return res
 
