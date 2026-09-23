@@ -81,54 +81,75 @@ Each component phase follows the same loop:
 
 ## Current status
 
-**Phase 1 — feature-complete, baseline recorded.** All four commands run end to end:
-`ingest`, `ask` (and `ask --retrieval-only`), `eval`, `serve`.
+**Phases 1 and 2 are built and committed.** All commands run end to end: `ingest`, `ask`
+(and `--retrieval-only`), `eval` (and `--retrieval-only`, `--resume`), `serve`.
+`scripts/compare_runs.py` produces every comparison below.
 
-Built:
+### The fixed set — 87 questions
 
-- ✅ **Ingestion** — loader → filter → cleaner → chunker, 281 files → 4,908 chunks.
-  Re-ingest is incremental and sub-second when nothing changed; the manifest digest covers
-  chunking and embedder settings, so changing either forces a rebuild rather than leaving a
-  stale index.
-- ✅ **Storage** — one SQLite file: `chunks`, `files`, `vec_chunks` (sqlite-vec, cosine).
-- ✅ **Retrieval** — dense retriever plus the Phase 2/3/4 null objects.
-- ✅ **Answering** — both gates, the grounded prompt, the citation check, an
-  OpenAI-compatible generator (Groq).
-- ✅ **Eval harness** + a 30-question fixed set (12 k8s / 12 docker / 6 should-refuse),
-  every `expect_docs` path verified against the live index.
-- ✅ **Demo UI** (Gradio), **Docker** image + compose, and three test files.
+33 k8s-answerable · 33 docker-answerable · 21 should-refuse. 20 of the 21 refusals are
+near-misses built to score *above* the retrieval floor, so they test the citation gate.
+Design, discards and spares: `eval/README.md`.
 
-### Baseline — `eval/runs/baseline.jsonl`
+### Phase 1 — baseline (`eval/runs/baseline.jsonl`, floor 0.65)
 
-| | |
+| metric | value |
 |---|---|
-| hit-rate@5 | **0.958** |
-| MRR | **0.847** |
-| MRR by tag | exact-term 0.900 · paraphrase 0.700 · cross-source 0.333 |
+| hit-rate@5 · MRR | 0.969 · **0.795** |
+| citation validity | **1.000** — no invented citations in 62 answers |
+| source accuracy | 0.984 |
+| refusal recall · precision | **0.952** · 0.833 |
+| false-refusal rate | 0.062 |
+| refusals by gate | citation 22 · floor 2 |
+| p50 latency | 9.0s (gpt-oss-20b is a reasoning model) |
 
-### What the baseline already tells us about Phases 2-4
+### Phase 2 — + cross-encoder reranker (`eval/runs/+reranker.jsonl`)
 
-The harness earned its keep before a single component was added:
+**Retrieval, all 87 questions — final:**
 
-- **Exact-term retrieval is already at 0.900 MRR.** Phase 3's premise was that BM25 would
-  win on flag names and error codes. There is very little room there — expect a small or
-  negative delta, and report it as a result.
-- **Paraphrase reached 0.700 only after a chunking fix** (the overlap carry was a no-op at
-  59% of boundaries; fixing it moved paraphrase MRR 0.390 → 0.700 — see
-  `eval/runs/baseline-pre-overlap-fix.jsonl`). Phase 4's rewriter has correspondingly less
-  headroom than planned.
-- **Cross-source is the weak spot at 0.333** — a question answerable from one doc set whose
-  top hits come from the other. That is reranking territory, so Phase 2 has the clearest
-  case of the three.
-- **Five of six should-refuse questions clear the retrieval floor** and can only be stopped
-  by the citation gate. The two-gate design in ADR-0001 is now an empirical result rather
-  than an argument.
+| MRR by slice | n | baseline | +reranker | delta |
+|---|---|---|---|---|
+| **all answerable** | 66 | 0.788 | **0.867** | **+0.080** |
+| cross-source | 4 | 0.375 | 0.875 | **+0.500** |
+| docker-answerable | 33 | 0.813 | 0.934 | +0.121 |
+| exact-term | 35 | 0.833 | 0.919 | +0.086 |
+| paraphrase | 18 | 0.667 | 0.727 | +0.060 |
+| k8s-answerable | 33 | 0.763 | 0.801 | +0.038 |
+
+hit-rate@5 0.970 → 0.985. MRR moves five times more than hit-rate — the predicted shape,
+since a cross-encoder reorders what retrieval found rather than finding more. Retrieval
+latency 47ms → 960ms.
+
+**Generative — paired on the questions complete in both runs (partial):** MRR 0.792 →
+0.877, false-refusal rate 0.070 → 0.053, citation validity unchanged at 1.000 once a
+scoring bug was fixed (image tags inside HCL code were being read as citations). Refusal
+metrics are **pending**: 20 questions, mostly refusals, hit the free tier's rolling daily
+token cap and are being completed with `eval --resume`.
+
+**Verdict: the reranker earns its place.** The Phase 1 baseline predicted cross-source as
+reranking territory before the reranker existed; it moved +0.500, the largest gain of any
+slice. See ADR-0008 for why it decides *order* but not *score*.
+
+**Its one measured cost to correctness:** because the gate still reads dense cosine, the
+reranker can only make gate 1 stricter. It bites once — `dkr-shrink-image` ranks better
+(RR 0.5 → 1.0) but its promoted chunk scores 0.639 against the 0.65 floor. Predicted in
+ADR-0008 before the run.
+
+### What Phases 1-2 tell us about Phases 3-4
+
+- **Phase 3 (BM25 hybrid) has very little room left.** Its premise was exact-term queries.
+  Dense retrieval already scored 0.833 there, and reranking lifted it to **0.919**. The
+  strongest remaining test is `dkr-inline-cache-build-arg`: `BUILDKIT_INLINE_CACHE` is in
+  exactly one chunk of 4,908. Expect a small or negative delta, and report it as a result.
+- **Phase 4 (query rewriter) is aimed at paraphrase, now 0.727** — the lowest slice left.
+  It must earn that against the latency of an extra LLM call on every query.
+- **RRF fusion (Phase 3) introduces a third score scale**, so `hits[0].score` will no longer
+  be a cosine at all. Re-run the floor *rule* from `eval/floor-tuning.md`; do not re-argue
+  the value.
 
 ### Open
 
-- ⏳ `retrieval.floor` is still the provisional **0.55**. The eval set exists to set it
-  properly; it must not be tuned on the same questions it is then scored against.
-- ⏳ Deploy to Hugging Face Spaces (image builds and runs locally; nothing has run on Spaces).
-- ⏳ Minor: `_index` in citation tags (41 docs), HTML comments and link URLs left in chunk
-  text — each changes chunk content, so each invalidates the baseline and wants a
-  re-measure.
+- ⏳ **Finish the Phase 2 generative run** — `eval --resume` as the token window frees.
+- ⏳ Deploy to Hugging Face Spaces (image builds and runs locally; nothing has run there).
+- ⏳ Minor chunk-content items: `_index` in citation tags (41 docs), HTML comments and
+  link URLs left in chunk text. Each changes chunk content and so invalidates every run.
