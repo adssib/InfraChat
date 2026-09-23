@@ -24,6 +24,7 @@ from infrachat.ingest.loader import SourceMissingError, walk
 from infrachat.models import Chunk
 from infrachat.pipeline import Deps, answer_query, retrieve
 from infrachat.retrieve.dense import DenseRetriever
+from infrachat.retrieve.hybrid import HybridRetriever
 from infrachat.retrieve.rerank import build as build_reranker
 from infrachat.retrieve.rewrite import IdentityRewriter
 from infrachat.store.chunks import ChunkStore, content_hash
@@ -153,15 +154,15 @@ def _build_deps(cfg: Config, store: ChunkStore, embedder, *, with_llm: bool) -> 
     loudly rather than silently ignored — a config that says `rerank.enabled: true` while
     the pipeline quietly passes through would make an eval run mislabel its own results.
     """
-    for flag, phase in [(cfg.retrieval.hybrid.enabled, "3 (hybrid)"),
-                        (cfg.rewrite.enabled, "4 (query rewriter)")]:
+    for flag, phase in [(cfg.rewrite.enabled, "4 (query rewriter)")]:
         if flag:
             raise SystemExit(f"config enables a component from Phase {phase}, which is not built yet.\n"
                              f"  Set it back to false — an enabled-but-absent component would "
                              f"mislabel your eval results.")
     return Deps(
         rewriter=IdentityRewriter(),
-        retriever=DenseRetriever(store, embedder),
+        retriever=(HybridRetriever(store, embedder) if cfg.retrieval.hybrid.enabled
+                   else DenseRetriever(store, embedder)),
         reranker=build_reranker(cfg.rerank),
         llm=llm.build(cfg.require_llm()) if with_llm else None,
     )

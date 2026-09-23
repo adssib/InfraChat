@@ -210,6 +210,70 @@ class ChunkStore:
         }
         return [by_id[i] for i in ids if i in by_id]   # preserve caller's ranking
 
+    # ---- keyword index (Phase 3) ---------------------------------------------
+
+    def ensure_keyword_index(self) -> int:
+        """Build the FTS5 index from `chunks` if it is missing or stale; return its size.
+
+        A *derived* artifact (ADR-0005): rebuilt from the chunk table rather than written
+        during ingest, so enabling hybrid search needs no re-ingest and the index can never
+        disagree with the chunks it was built from. ~5k rows rebuild in well under a second.
+
+        Tokenizer: porter stemming over unicode61 with `_` as a token character, so an
+        identifier like BUILDKIT_INLINE_CACHE indexes as ONE rare token — maximum IDF,
+        which is the entire reason to have a keyword arm next to dense retrieval.
+        """
+        self.db.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS fts_chunks USING fts5("
+            "chunk_id UNINDEXED, text, tokenize = \"porter unicode61 tokenchars '_'\")"
+        )
+        n_fts = self.db.execute("SELECT count(*) FROM fts_chunks").fetchone()[0]
+        n_chunks = self.db.execute("SELECT count(*) FROM chunks").fetchone()[0]
+        if n_fts != n_chunks:
+            with self.db:
+                self.db.execute("DELETE FROM fts_chunks")
+                self.db.execute("INSERT INTO fts_chunks (chunk_id, text) SELECT id, text FROM chunks")
+        return n_chunks
+
+    def keyword_search(self, query: str, k: int) -> list[str]:
+        """BM25 over the chunk text. Returns chunk ids, best first.
+
+        The question is natural language, and FTS5 query syntax treats `-`, `:`, `"`, `*`
+        and bare AND/OR/NOT as operators. So each whitespace token becomes a quoted
+        phrase and the phrases are OR-ed: `--mount=type=cache` is searched as the phrase
+        it is, never parsed. BM25's IDF does the rest — common words weigh almost nothing.
+        """
+        terms = []
+        for raw in query.split():
+            t = raw.strip(".,;:!?()[]{}'\"`")
+            if len(t) >= 2:
+                terms.append('"' + t.replace('"', '""') + '"')
+        if not terms:
+            return []
+        rows = self.db.execute(
+            "SELECT chunk_id FROM fts_chunks WHERE fts_chunks MATCH ? "
+            "ORDER BY bm25(fts_chunks) LIMIT ?",
+            (" OR ".join(terms), k),
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def cosine_distances(self, query_vector: Sequence[float], ids: Iterable[str]) -> dict[str, float]:
+        """Cosine distance between the query and specific chunks.
+
+        Lets a chunk found only by BM25 carry the same kind of score as one found by
+        dense search, so `Retrieved.score` stays a cosine through fusion and
+        `retrieval.floor` keeps the meaning eval/floor-tuning.md derived for it.
+        """
+        ids = list(ids)
+        if not ids:
+            return {}
+        rows = self.db.execute(
+            f"SELECT chunk_id, vec_distance_cosine(embedding, ?) FROM vec_chunks"
+            f" WHERE chunk_id IN ({','.join('?' * len(ids))})",
+            (_f32(query_vector), *ids),
+        ).fetchall()
+        return {r[0]: r[1] for r in rows}
+
     # ---- reporting ------------------------------------------------------------
 
     def stats(self) -> dict[str, int]:
