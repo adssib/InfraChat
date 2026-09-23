@@ -42,9 +42,15 @@ class Retrieval:
     the debugging surface that stands in for a test suite.
     """
 
-    query: str          # after rewriting
+    query: str          # after rewriting — what the RETRIEVER saw
     hits: list[Retrieved]
     decision: GateDecision
+    #: What the USER asked. The rewrite exists to steer retrieval; the answer must still
+    #: address the original question. Before Phase 4 the identity rewriter made the two
+    #: identical, which hid that the grounded prompt was built from `query` — so a real
+    #: rewriter would have had the generator answer its own keyword expansion
+    #: ("multi-stage build reduce image size COPY --from") instead of the question.
+    question: str = ""
 
 
 def retrieve(query: str, cfg: Config, deps: Deps) -> Retrieval:
@@ -52,7 +58,7 @@ def retrieve(query: str, cfg: Config, deps: Deps) -> Retrieval:
     q = deps.rewriter.rewrite(query)
     candidates = deps.retriever.retrieve(q, cfg.retrieval.retrieve_n)
     hits = deps.reranker.rerank(q, candidates, cfg.retrieval.k)
-    return Retrieval(query=q, hits=hits, decision=check(hits, cfg.retrieval.floor))
+    return Retrieval(query=q, hits=hits, decision=check(hits, cfg.retrieval.floor), question=query)
 
 
 def answer_query(query: str, cfg: Config, deps: Deps) -> Answer:
@@ -77,7 +83,7 @@ def answer_from(r: Retrieval, cfg: Config, deps: Deps) -> Answer:
 
     max_chunks = cfg.require_llm().max_context_chunks
     completion = deps.llm.complete(
-        SYSTEM_PROMPT, build_prompt(r.query, r.decision.hits, max_chunks)
+        SYSTEM_PROMPT, build_prompt(r.question or r.query, r.decision.hits, max_chunks)
     )
     return citations.verify(                                     # gate 2 — F9
         completion, r.decision.hits, offered_tags(r.decision.hits, max_chunks)

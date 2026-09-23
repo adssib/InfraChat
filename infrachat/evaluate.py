@@ -41,6 +41,7 @@ Known limits, stated rather than hidden:
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -57,6 +58,7 @@ import yaml
 
 from infrachat.answer.citations import parse_tag_candidates
 from infrachat.answer.prompt import SYSTEM_PROMPT_SHA
+from infrachat.retrieve.rewrite import REWRITE_PROMPT_SHA
 from infrachat.answer.prompt import offered_tags
 from infrachat.config import Config
 from infrachat.models import Answer
@@ -205,15 +207,16 @@ class _CountingLLM:
     summary says so rather than under-reporting silently.
     """
 
-    def __init__(self, inner: Any) -> None:
+    def __init__(self, inner: Any, shared: "_CountingLLM | None" = None) -> None:
         self._inner = inner
+        self._sink = shared or self          # a second wrapper reports into the first
         self.calls: list[dict[str, int]] = []
         self.last: str | None = None
 
     def complete(self, system: str, user: str) -> str:
         text = self._inner.complete(system, user)
-        self.last = text
-        self.calls.append(
+        self._sink.last = text
+        self._sink.calls.append(
             {
                 "prompt_chars": len(system) + len(user),
                 "completion_chars": len(text),
@@ -607,6 +610,11 @@ def _header(cfg: Config, deps: Deps, questions: Sequence[Question], root: Path) 
         # and it lives in an easily-edited text file. Without this, a prompt tweak
         # changes the numbers with nothing in the record saying so.
         "system_prompt_sha": SYSTEM_PROMPT_SHA,
+        "rewrite": None if not cfg.rewrite.enabled else {
+            "model": cfg.rewrite.model,
+            "reasoning_effort": cfg.rewrite.reasoning_effort,
+            "prompt_sha": REWRITE_PROMPT_SHA,
+        },
         "corpus": [
             {
                 "source": s.name,
@@ -646,7 +654,7 @@ def _resolve(path: Path, root: Path) -> Path:
 
 
 #: Header fields that must match for a resumed run to stay one experiment.
-_COMPARABLE = ("question_set_sha256", "system_prompt_sha", "corpus", "embedder", "chunk",
+_COMPARABLE = ("question_set_sha256", "system_prompt_sha", "rewrite", "corpus", "embedder", "chunk",
                "retrieval", "generator", "components")
 
 
@@ -688,6 +696,14 @@ def run(cfg: Config, deps: Deps, *, root: Path | None = None,
     if deps.llm is not None:
         counter = _CountingLLM(deps.llm)
         deps = replace(deps, llm=counter)       # a copy: the caller's Deps is untouched
+        # Phase 4: the rewriter holds its own client. Wrap it into the same counter so a
+        # question's cost includes the rewrite — otherwise Phase 4 would look free. The
+        # rewriter runs before the generator, so `counter.last` still ends up holding the
+        # generator's completion whenever raw_completion is recorded.
+        if getattr(deps.rewriter, "client", None) is not None:
+            rewriter = copy.copy(deps.rewriter)
+            rewriter.client = _CountingLLM(rewriter.client, shared=counter)
+            deps = replace(deps, rewriter=rewriter)
 
     results_dir = _resolve(cfg.eval.results_dir, root)
     results_dir.mkdir(parents=True, exist_ok=True)

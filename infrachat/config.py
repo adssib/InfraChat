@@ -87,8 +87,12 @@ class RerankConfig(BaseModel):
 
 
 class RewriteConfig(BaseModel):
+    """The Phase 4 query rewriter. Shares the generator's endpoint and key, not its model."""
+
     enabled: bool = False
-    model: str = ""
+    model: str = "openai/gpt-oss-20b"
+    reasoning_effort: str | None = "low"
+    max_tokens: int = 512
 
 
 class EmbedderConfig(BaseModel):

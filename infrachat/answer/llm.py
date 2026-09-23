@@ -42,6 +42,7 @@ class OpenAICompatClient:
         max_tokens: int = 4096,
         timeout: float = 60.0,
         max_retries: int = 6,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.base_url = base_url
         self.model = model
@@ -49,6 +50,7 @@ class OpenAICompatClient:
         self.max_tokens = max_tokens
         self.timeout = timeout
         self.max_retries = max_retries
+        self.reasoning_effort = reasoning_effort
         self._client = None
 
     def _key(self) -> str:
@@ -86,6 +88,10 @@ class OpenAICompatClient:
                 ],
                 temperature=0,          # reproducible runs — see module docstring
                 max_tokens=self.max_tokens,
+                # Reasoning models only. The generator leaves it unset; the Phase 4
+                # rewriter sets "low" — measured 26 reasoning tokens and ~0.5s, against ~9s
+                # at the default, for a task that needs recall, not deliberation.
+                **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}),
             )
         except RateLimitError as e:
             raise RuntimeError(
