@@ -37,4 +37,5 @@ measurement or the constraint that settled it.
 | **LLM provider + model** — which OpenAI-compatible endpoint, hosted or local | Phase 1 | cost and refusal-obedience on the real question set |
 | **Two-stage retrieval sizing** — `retrieve_n` = 20, `k` = 5 | Phase 2 | reranker latency vs. the hit-rate/MRR delta |
 | **Fusion method** — reciprocal rank fusion vs. score-weighted | Phase 3 | whether the two arms' scores turn out comparable at all |
+| **Entailment gate** — a third check that each cited chunk actually supports its sentence (ADR-0007's 🔭) | forced after Phase 2 | Phase 2 raised MRR +0.082 but cut refusal recall 0.952 → 0.857: two near-miss refusals became fabrications with **valid** citations, built from chunks the reranker promoted. The citation gate is the measured weak point. |
 | **Whether the query rewriter ships** | Phase 4 | the latency it adds vs. the quality it buys. **If it doesn't earn its place, the ADR records removing it** — with the numbers. |

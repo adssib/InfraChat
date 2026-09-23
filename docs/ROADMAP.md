@@ -120,20 +120,50 @@ hit-rate@5 0.970 → 0.985. MRR moves five times more than hit-rate — the pred
 since a cross-encoder reorders what retrieval found rather than finding more. Retrieval
 latency 47ms → 960ms.
 
-**Generative — paired on the questions complete in both runs (partial):** MRR 0.792 →
-0.877, false-refusal rate 0.070 → 0.053, citation validity unchanged at 1.000 once a
-scoring bug was fixed (image tags inside HCL code were being read as citations). Refusal
-metrics are **pending**: 20 questions, mostly refusals, hit the free tier's rolling daily
-token cap and are being completed with `eval --resume`.
+**Generative — final, paired on 86 of 87 questions** (one baseline question exhausted
+`max_tokens` while reasoning and is excluded from both arms):
 
-**Verdict: the reranker earns its place.** The Phase 1 baseline predicted cross-source as
-reranking territory before the reranker existed; it moved +0.500, the largest gain of any
-slice. See ADR-0008 for why it decides *order* but not *score*.
+| metric | baseline | +reranker | delta |
+|---|---|---|---|
+| hit@5 | 0.969 | 0.985 | +0.015 |
+| MRR | 0.795 | **0.877** | **+0.082** |
+| citation validity | 1.000 | 1.000 | 0 |
+| source accuracy | 0.984 | 0.984 | 0 |
+| false-refusal rate | 0.062 | 0.046 | −0.015 |
+| refusal precision | 0.833 | 0.857 | +0.024 |
+| **refusal recall** | **0.952** | **0.857** | **−0.095** |
 
-**Its one measured cost to correctness:** because the gate still reads dense cosine, the
-reranker can only make gate 1 stricter. It bites once — `dkr-shrink-image` ranks better
-(RR 0.5 → 1.0) but its promoted chunk scores 0.639 against the 0.65 floor. Predicted in
-ADR-0008 before the run.
+Verdicts changed on 7 questions: 3 answerable questions newly answered, 2 newly refused,
+and **2 should-refuse questions newly answered — both fabrications**:
+
+- `refuse-docker-named-volume` — claims the Dockerfile `VOLUME` instruction "creates a named
+  volume". It creates an anonymous one. The reranker promoted `storage/volumes.md` to #1.
+- `refuse-etcd-backup-restore` — describes who may access etcd, not how to back it up,
+  citing `security/api-server-bypass-risks`: a chunk absent from the baseline's top 3 that
+  the reranker put at #1, and exactly the one cited.
+
+**The mechanism:** a cross-encoder finds the most plausible chunk for a question. For an
+unanswerable near-miss, that is the most plausible *wrong* chunk. Reranking improves
+answerable retrieval and makes near-miss refusals harder, for the same reason. Both escapes
+passed the citation gate with **valid** citations — ADR-0007's provenance-vs-entailment
+limit, now triggered more often. n=2 of 21 on a provider where temperature 0 is not
+deterministic, so this is direction rather than precision; but in both cases the answer is
+built from precisely the chunk the reranker newly promoted.
+
+Net on correctness: +1 correct answer, +2 fabrications. By ADR-0001's own ordering —
+a confident wrong answer is worse than a refusal — that is not a clean win.
+
+Latency is **not** comparable between these runs: the +reranker run was completed across
+six hours by `--resume` under different provider load (p50 3.3s vs 9.3s).
+
+**Verdict: the reranker is a large retrieval win with a measured cost to refusal recall.**
+It stays enabled, but the cost is what forces the entailment gate that ADR-0007 recorded
+as unscheduled: the citation gate is now provably the weak point, and reranking leans on
+it harder. See ADR-0008 for why the reranker decides *order* but not *score*.
+
+**Its other measured cost:** because the gate reads dense cosine, the reranker can only
+make gate 1 stricter. `dkr-shrink-image` ranks better (RR 0.5 → 1.0) but its promoted
+chunk scores 0.639 against the 0.65 floor — predicted in ADR-0008 before the run.
 
 ### What Phases 1-2 tell us about Phases 3-4
 
@@ -149,7 +179,7 @@ ADR-0008 before the run.
 
 ### Open
 
-- ⏳ **Finish the Phase 2 generative run** — `eval --resume` as the token window frees.
+- ⏳ **Entailment gate** — forced by the Phase 2 result above; see ADR-0007.
 - ⏳ Deploy to Hugging Face Spaces (image builds and runs locally; nothing has run there).
 - ⏳ Minor chunk-content items: `_index` in citation tags (41 docs), HTML comments and
   link URLs left in chunk text. Each changes chunk content and so invalidates every run.

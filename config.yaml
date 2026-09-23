@@ -36,7 +36,7 @@ infrachat:
   eval:
     question_set: "eval/questions.yaml"
     results_dir: "eval/runs"
-    run_label: "baseline"
+    run_label: "+reranker"
 
   # The generator. `ingest` and `ask --retrieval-only` still run without a key.
   llm:
@@ -57,7 +57,7 @@ infrachat:
   # The reranker reorders; it does NOT rewrite `score`, so `floor` above keeps
   # meaning what eval/floor-tuning.md tuned it to mean. See the module docstring.
   rerank:
-    enabled: false
+    enabled: true
     model: "Xenova/ms-marco-MiniLM-L-6-v2"
 
   # ---------------------------------------------------------------- PHASE 3
