@@ -376,3 +376,986 @@ questions:
       vs floor 0.55). Kept deliberately easy: it is the control that proves gate 1
       fires at all, so a refusal-recall number can be read as "which gate did the
       work", not just "it refused".
+
+  # --------------------------------------------------------------------------
+  # Kubernetes workloads — pods, controllers, scheduling, autoscaling
+  # (merged from candidates/k8s-workloads.yaml)
+  # --------------------------------------------------------------------------
+
+
+  # ------------------------------------------------------------ k8s-answerable (10)
+
+  - id: k8s-replicaset-basics
+    question: "What is a ReplicaSet?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/controllers/replicaset.md"]
+    tags: [easy]
+    note: >-
+      The workloads-slice sanity case, with one twist that makes it worth more than
+      k8s-pod-basics: top-1 is replicationcontroller.md (0.808) — the legacy API whose
+      page is written as a near-copy of the ReplicaSet page — and replicaset.md is only
+      rank 2 (0.801, a 0.007 gap). Three of the five hits are the right page, so
+      hit-rate@5 passes; MRR is 0.5. A reranker that cannot separate two pages that
+      differ by one deprecated noun has nothing to offer on the harder questions.
+
+  - id: k8s-restart-policy-values
+    question: "What values can restartPolicy have for a Pod?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/pods/pod-lifecycle.md"]
+    tags: [exact-term]
+    note: >-
+      A camelCase field name that three different pages discuss, and the baseline picks
+      the wrong one: ranks 1, 2 and 4 are all job.md (top-1 0.830), which talks about
+      restartPolicy only as a Job constraint, while pod-lifecycle.md — the page that
+      lists Always / OnFailure / Never — is rank 3 (0.806). MRR 0.333 with the answer
+      sitting behind 113 chunks of Job documentation: the single clearest intra-source
+      MRR target in the workloads set. A wrong answer here looks authoritative, because
+      job.md really does say "restartPolicy".
+
+  - id: k8s-job-indexed-completion
+    question: "What does completionMode Indexed do for a Job?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/controllers/job.md"]
+    tags: [exact-term]
+    note: >-
+      An exact term inside the second-largest document in the corpus (job.md, 113
+      chunks). All five hits are that page, rank 1 at 0.802, and ranks 1-2 are the
+      Indexed-completion section itself — so this is the control for
+      k8s-restart-policy-values: same page, same kind of literal, but the baseline gets
+      it right. If a Phase 3 fusion arm moves this one down, the regression is in
+      tokenisation, not in ranking.
+
+  - id: k8s-cronjob-concurrency-policy
+    question: "What is the difference between the Forbid and Replace concurrencyPolicy in a CronJob?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/controllers/cron-jobs.md"]
+    tags: [exact-term]
+    note: >-
+      Two enum values of one field, and the answer needs both. Rank 1 (0.854) is the
+      chunk that enumerates the policies and rank 3 is the chunk that explains Replace,
+      so this is a citation-validity question more than a hit-rate one: the top-5 holds
+      the whole answer only if both chunks survive into the prompt. Rank 5 is job.md on
+      concurrent pods (0.738) — plausible, wrong, and quotable.
+
+  - id: k8s-hpa-stabilization-window
+    question: "What does stabilizationWindowSeconds do in a HorizontalPodAutoscaler?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/autoscaling/horizontal-pod-autoscale.md"]
+    tags: [exact-term]
+    note: >-
+      Right page, wrong chunks — the failure mode hit-rate@5 cannot see. All five hits
+      are horizontal-pod-autoscale.md (top-1 0.769) so hit-rate@5 is 1.0 and MRR is
+      1.0, but the retrieved chunks are the page's overview (L57-63), its API-stability
+      note and a scaling-policy example; the section that defines the stabilization
+      window is in none of them. The scores are also flat — 0.769 down to 0.757 across
+      60 chunks of one page — which is the dense arm saying it cannot tell these chunks
+      apart. Expect a grounded-but-incomplete answer at baseline; this is the question
+      a reranker should fix without moving either retrieval metric at all.
+
+  - id: k8s-nodeselector-placement
+    question: "What does nodeSelector do?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["scheduling-eviction/assign-pod-node.md"]
+    tags: [exact-term, cross-source]
+    note: >-
+      An F10 trap on a pure Kubernetes API field: top-1 is a DOCKER page
+      (builders/drivers/kubernetes.md, 0.758) because buildx's Kubernetes driver takes
+      a nodeSelector option of its own, and rank 4 is the same Docker page again.
+      assign-pod-node.md, which defines the field, is rank 2 (0.719) — so MRR is 0.5
+      and the top-ranked chunk is both wrong and from the wrong doc set. Citing Docker
+      here is a source-accuracy failure; it is also the most natural mistake in the set,
+      since the word appears verbatim in both places.
+
+  - id: k8s-daemonset-per-node
+    question: "How do I make sure exactly one log collector pod runs on every node?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/controllers/daemonset.md", "workloads/controllers/_index.md"]
+    tags: [paraphrase]
+    note: >-
+      Never says "DaemonSet", and the page that answers it never appears: top-1 is
+      cluster-administration/logging.md (0.782, node-level logging agents), rank 2 is a
+      DRA page, and daemonset.md is absent from the top 5 entirely. What does land, at
+      rank 3, is the one overview paragraph in controllers/_index.md that describes a
+      DaemonSet as node-local Pods — enough to name the right API, not enough to
+      answer. So hit-rate@5 scores this a hit (MRR 0.333) while the real answer was
+      never retrieved: read this question together with k8s-hpa-stabilization-window
+      before trusting an aggregate hit-rate.
+
+  - id: k8s-autoscale-on-traffic
+    question: "How do I make my application run more copies automatically when traffic increases?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/autoscaling/horizontal-pod-autoscale.md", "workloads/autoscaling.md"]
+    tags: [paraphrase]
+    note: >-
+      The Kubernetes counterpart to dkr-shrink-image, and the only outright baseline
+      MISS in this candidate set: no "autoscale", "HorizontalPodAutoscaler", "replicas"
+      or "metric", so neither expected page appears at all. Top-1 is
+      replicationcontroller.md on release tracks (0.701), rank 3 is a Docker page, and
+      rank 4 is deployment.md's *proportional scaling during rollout* section — the
+      most dangerous hit in the whole candidate set, because it is about scaling and is
+      not about autoscaling. Lowest top-1 margin here (+0.151 over floor), so this is
+      also the answerable question most likely to be falsely refused. Hit-rate@5 0.0
+      and MRR 0.0 at baseline: headroom for Phase 4 by construction.
+
+  - id: k8s-init-container-wait
+    question: "How do I wait for a database to be ready before my application container starts?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["workloads/pods/init-containers.md"]
+    tags: [paraphrase]
+    note: >-
+      Init-container coverage from the problem end rather than the API end (contrast
+      k8s-init-vs-sidecar-containers, which names both features). Uses none of the
+      page's vocabulary — not "init container", not "block", not "app container" — and
+      still lands rank 1 at 0.728, with three of five hits on the right page. Recorded
+      as a baseline fact worth keeping: dense retrieval does handle *some* paraphrases
+      unaided, so a rewriter that only ever helps must be shown not to hurt this one.
+      Rank 2 is containers/images.md on ImagePullBackOff — a different reason a
+      container has not started yet.
+
+  - id: k8s-toleration-dedicated-node
+    question: "How do I allow a pod to be scheduled onto a node that most other pods are kept away from?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["scheduling-eviction/taint-and-toleration.md"]
+    tags: [paraphrase]
+    note: >-
+      Tolerations from the other side of k8s-noexecute-taint: that question names an
+      exact taint effect, this one names no scheduling vocabulary at all — no "taint",
+      "toleration", "dedicated" or "affinity". taint-and-toleration.md reaches rank 3
+      (0.822) behind a DRA internals page (0.858) and daemonset.md's
+      tolerations-it-adds-automatically section (0.825), which is adjacent enough to
+      mislead. Every one of the five scores is above 0.81, so the gate is wide open and
+      ranking is the only thing protecting the answer.
+
+  # ------------------------------------------------------------ should-refuse (1)
+
+  - id: refuse-keda-scaledobject
+    question: "What is a KEDA ScaledObject?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The workloads-side near-miss, and a sharper one than refuse-kubeadm-upgrade: KEDA
+      is not outside the corpus, it is *named in it*. workloads/autoscaling.md describes
+      KEDA in two chunks — as a CNCF project, with a link to keda.sh — and those two
+      chunks are ranks 1 and 3 (top-1 0.742, clearing floor 0.55 by +0.192). The word
+      "ScaledObject" appears in zero chunks of 4,908. So the retrieved text is on-topic,
+      in-corpus, about the right project, and cannot define the object asked about: the
+      floor cannot catch this and only the citation check can. Fabrication risk is high
+      because KEDA's CRD is well known outside these docs — this is the question that
+      tests whether the answer comes from the retrieved chunks or from the model.
+
+  # --------------------------------------------------------------------------
+  # Kubernetes platform — networking, storage, security, configuration
+  # (merged from candidates/k8s-platform.yaml)
+  # --------------------------------------------------------------------------
+
+
+  # ------------------------------------------------------------ networking (4)
+
+  - id: k8s-service-nodeport-vs-loadbalancer
+    question: "What is the difference between a NodePort and a LoadBalancer Service?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["services-networking/service.md"]
+    tags: [exact-term]
+    note: >-
+      The Service-type coverage k8s-service-clusterip does not give: ClusterIP is one
+      value of `spec.type`, and nothing in the fixed set exercises the other two. Two
+      CamelCase enum values in one question, and the answer needs two separate sections
+      of the largest networking document (76 chunks). Measured top-1 0.828, service.md
+      at rank 1 — with ranks 2, 3 and 5 also service.md and windows-networking.md
+      wedged in at rank 4, so the interesting metric here is citation validity, not
+      hit-rate: four of the five chunks are right and the generator still has to pick
+      the two that actually contrast the types.
+
+  - id: k8s-ingress-path-routing
+    question: "How do I route requests for different URL paths to different backends?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["services-networking/ingress.md"]
+    tags: [paraphrase]
+    note: >-
+      Ingress is a 45-chunk document with no representation in the fixed set. The
+      question says neither "Ingress", nor "rule", nor "host", nor "pathType" — the four
+      words the answering page is built on — so it is a genuine rewriter case. Measured
+      top-1 0.758 with ingress.md at rank 1 (ranks 1-3), but gateway.md takes ranks 4-5
+      at 0.719/0.710: Gateway API is the legitimate-looking wrong answer, and a
+      reranker that promotes it would be defensible to a human and wrong for this
+      corpus. Low absolute scores across the board (nothing above 0.76) make this one of
+      the thinner margins above floor=0.55 among answerable questions.
+
+  - id: k8s-networkpolicy-default-allow
+    question: "By default, can any pod in the cluster send traffic to any other pod?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["services-networking/network-policies.md"]
+    tags: [paraphrase]
+    note: >-
+      NetworkPolicy (38 chunks) is absent from the fixed set. Phrased as a yes/no
+      question about default behaviour, using none of "NetworkPolicy", "isolated",
+      "ingress", "egress" or "selector". Measured top-1 0.788 with network-policies.md
+      at ranks 1 and 2. Two wordings that did NOT work were discarded rather than
+      recorded as wins: "how do I make sure only the frontend pods can reach the backend
+      pods?" returns service.md and replicaset.md with no network-policies.md in the
+      top 5 at all (frontend/backend are Service examples), and "how do I restrict which
+      pods are allowed to connect to my database pod?" returns five security/ checklist
+      chunks. The surviving phrasing is the one that retrieves the page that answers it.
+
+  - id: k8s-dns-resolv-conf-search
+    question: "What does the search line in a pod's resolv.conf contain?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["services-networking/dns-pod-service.md"]
+    tags: [exact-term]
+    note: >-
+      Cluster DNS has no question in the fixed set. `resolv.conf` is a literal filename
+      and `search` a literal directive, so this is a BM25 case. Measured top-1 0.764
+      with dns-pod-service.md at rank 1, and the chunk holding the actual answer — the
+      verbatim `search <namespace>.svc.cluster.local svc.cluster.local cluster.local`
+      block — at rank 5 (0.748). Worth stating plainly: the rank-1 chunk only
+      paraphrases ("a client Pod's DNS search list includes the Pod's own namespace and
+      the cluster's default domain"), so this question scores a hit on a chunk that
+      does not contain the literal answer. That gap between document-level hit-rate and
+      what the generator was actually shown is the thing to watch here. Also noisy:
+      configmap.md is rank 2 and statefulset.md rank 4, both on unrelated business.
+
+  # ------------------------------------------------------------ storage (2)
+
+  - id: k8s-pv-access-mode-readwriteonce
+    question: "What does the ReadWriteOnce access mode mean?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["storage/persistent-volumes.md"]
+    tags: [exact-term]
+    note: >-
+      Shares a document with k8s-pvc-basics but not a question: that one asks what a PVC
+      is, this one asks for the semantics of one CamelCase enum value, and the two
+      exercise different halves of an 86-chunk page. Measured top-1 0.796 with
+      persistent-volumes.md at rank 1 (ranks 1, 2, 3, 5). statefulset.md at rank 4 is
+      the near neighbour — it uses the term in a volumeClaimTemplate example — which
+      makes this the access-mode analogue of k8s-service-clusterip's field-selectors.md
+      problem, except that here the right page already wins.
+
+  - id: k8s-storageclass-volumebindingmode
+    question: "What does volumeBindingMode WaitForFirstConsumer do?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["storage/storage-classes.md"]
+    tags: [exact-term]
+    note: >-
+      The most MRR headroom in this file and StorageClass's only representation anywhere
+      in the eval. Measured top-1 0.811 is ephemeral-volumes.md and rank 2 (0.809) is
+      volumes.md — both merely mention the mode in passing — while storage-classes.md,
+      which defines it, does not appear until rank 3 (0.768) and then holds ranks 3, 4
+      and 5. Two wrong documents above the right one on a camelCase field name plus a
+      CamelCase value is precisely the shape Phase 2 and Phase 3 claim to fix; if
+      neither moves this question, neither is doing what it says.
+
+  # ------------------------------------------------------------ configuration (3)
+
+  - id: k8s-configmap-size-limit
+    question: "What is the maximum size of a ConfigMap?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["configuration/configmap.md"]
+    tags: [exact-term]
+    note: >-
+      ConfigMap has no question in the fixed set, and this one has a single checkable
+      fact behind it (1 MiB, configmap.md line 37), so a wrong answer is unambiguous
+      rather than arguable — most questions in the eval cannot say that. Measured top-1
+      0.791 with configmap.md at ranks 1, 2 and 3; the chunk carrying the number is
+      rank 3 (0.708). Note the score cliff: 0.791 then 0.711 — only the first chunk is
+      strongly matched, and a Docker page (cache/garbage-collection.md, 0.702) is close
+      enough to reach rank 4, so this also quietly watches whether a fusion stage lets a
+      Docker chunk into a Kubernetes answer.
+
+  - id: k8s-imagepullsecrets
+    question: "What is imagePullSecrets used for?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["configuration/secret.md", "containers/images.md"]
+    tags: [exact-term]
+    note: >-
+      Deliberately adjacent to k8s-imagepullpolicy: the same page, nearly the same
+      camelCase prefix, a different field. If a retriever conflates imagePullPolicy with
+      imagePullSecrets the two questions diverge and say so. Measured top-1 0.756 with
+      configuration/secret.md at rank 1 (and rank 5) and containers/images.md at ranks
+      3 and 4 — both are legitimate, which is why both are listed: secret.md owns the
+      `kubernetes.io/dockerconfigjson` Secret type and images.md owns the Pod-level
+      field. security-checklist.md at rank 2 is the distractor. The lowest top-1 of any
+      answerable question in this file.
+
+  - id: k8s-container-memory-limit
+    question: "How do I limit how much memory a container is allowed to use?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["configuration/manage-resources-containers.md"]
+    tags: [paraphrase]
+    note: >-
+      Resource requests and limits are a 59-chunk document with no question in the fixed
+      set; k8s-oom-eviction-order is about what happens after the node is already under
+      pressure, which is a different page and a different mechanism. Says neither
+      "limit" as the API field nor "request" nor "resources", only the plain-English
+      intent. Measured top-1 0.802 with manage-resources-containers.md at all five
+      ranks. Recorded as a finding: docs/EVAL.md names "how do I limit container
+      memory?" as its example of a both-source question, and against THIS corpus that is
+      not true — the Docker slice is manuals/build, which covers build-time resource
+      flags and not container runtime limits, and the measured top 5 contains zero
+      Docker chunks. Kept as expect_source: kubernetes on the evidence, and the
+      docs/EVAL.md example should be corrected rather than encoded here.
+
+  # ------------------------------------------------------------ security (2)
+
+  - id: k8s-securitycontext-runasnonroot
+    question: "What does runAsNonRoot do in a securityContext?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["security/pod-security-standards.md", "workloads/pods/advanced-pod-config.md"]
+    tags: [exact-term]
+    note: >-
+      The hardest answerable question in this file and the only one whose top-1 is
+      actively misleading. Measured top-1 0.787 is windows/intro.md, a page whose
+      mention of `securityContext.runAsNonRoot` exists only to say the setting behaves
+      differently on Windows — quotable, on-topic, and the wrong answer to give someone
+      on Linux. pod-security-standards.md, which states the Restricted-profile
+      requirement, is rank 2 (0.765); advanced-pod-config.md, the page that actually
+      documents the field in a Pod spec, is rank 3 (0.751); and windows/intro.md is
+      back at rank 5. Both correct pages are listed because the answer genuinely spans
+      them. A system that answers this from the Windows page has a high hit-rate and is
+      wrong, which is the failure mode hit-rate@5 cannot see.
+
+  - id: k8s-serviceaccount-rbac-permissions
+    question: "How do I configure RBAC permissions for a service account?"
+    class: k8s-answerable
+    expect_source: kubernetes
+    expect_docs: ["security/service-accounts.md"]
+    tags: []
+    note: >-
+      The answerable half of a pair with refuse-rbac-role-vs-clusterrole, built the way
+      dkr-bake-inheritance pairs with refuse-sourdough-bake: identical vocabulary, one
+      must be answered and the other refused, and keeping both is what proves the
+      refusal is about the corpus boundary rather than about the word "RBAC". Measured
+      top-1 0.807 with service-accounts.md at ranks 1, 4 and 5. Verified by reading the
+      page, not just the score: the "Grant permissions to a ServiceAccount" section does
+      answer the conceptual question — create a Role, bind it to the ServiceAccount —
+      and gives a cross-namespace Role/RoleBinding worked example, while linking out to
+      /docs/reference for the mechanics. rbac-good-practices.md at rank 2 is a
+      reasonable supporting citation but does not answer the question on its own.
+
+  # ------------------------------------------------------------ should-refuse (2)
+
+  - id: refuse-rbac-role-vs-clusterrole
+    question: "What is the difference between a Role and a ClusterRole?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      A refusal that looks exactly like a question the corpus should answer, and the
+      sharpest near-miss found in the security subtree. RBAC is unmistakably in-domain —
+      security/rbac-good-practices.md and security/service-accounts.md both exist and
+      both discuss Roles and RoleBindings — but the page that DEFINES the namespaced
+      versus cluster-scoped distinction is /docs/reference/access-authn-authz/rbac/,
+      outside the .../docs/concepts slice. Verified by grep, not by score: "ClusterRole"
+      appears in only five files in the whole slice, every one of them in passing
+      (system-metrics.md, rbac-good-practices.md, two DRA pages, cloud-controller.md),
+      and none contrasts it with Role. Measured top-1 0.729, comfortably above
+      floor=0.55, so the retrieval gate cannot catch this — and the top-1 is
+      workloads/pods/disruptions.md, which matches on "Role" in an unrelated
+      PodDisruptionBudget context. Gate 2 has to do the work. Same family as
+      refuse-kubeadm-upgrade: the boundary of the corpus, not the boundary of the
+      subject.
+
+  - id: refuse-nginx-ingress-annotations
+    question: "What annotations does the NGINX ingress controller support?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The highest-scoring refusal candidate found anywhere — measured top-1 0.795, above
+      refuse-compose-run-app's 0.785, which the fixed set calls its best collision. Every
+      noun is in-domain and the whole top 5 is the Ingress subtree:
+      ingress-controllers.md at rank 1 and four ingress.md chunks behind it. It is still
+      unanswerable, verified by grep: the corpus contains zero occurrences of
+      "nginx.ingress.kubernetes.io", "rewrite-target" or "proxy-body-size", and NGINX is
+      named in exactly three lines of ingress-controllers.md, all of them link-out list
+      entries. What makes this dangerous rather than merely hard is that adjacent
+      quotable annotation material DOES exist — ingress.md documents the deprecated
+      `kubernetes.io/ingress.class` annotation and the IngressClass default-class
+      annotation — so the plausible failure is not a blank fabrication but a real
+      annotation from the wrong system, correctly cited. If anything in the refusal class
+      gets answered, this is the one.
+
+  # --------------------------------------------------------------------------
+  # Docker build fundamentals — Dockerfile, context, layers, multi-stage
+  # (merged from candidates/docker-build.yaml)
+  # --------------------------------------------------------------------------
+
+
+  # ------------------------------------------------- build context & .dockerignore
+
+  - id: dkr-build-context-basics
+    question: "What is the build context?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["concepts/context.md"]
+    tags: [easy]
+    note: >-
+      The sanity case for the largest uncovered Docker page (concepts/context.md, 43
+      chunks, no question in the current set). Not quite free: top-1 is
+      bake/contexts.md at 0.825, which is about bake's per-target `context` key, and
+      the page that defines the concept is rank 2 with four of the five hits. If this
+      one misses, the Docker half of the index changed.
+
+  - id: dkr-dockerignore-purpose
+    question: "What is a .dockerignore file for?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["concepts/context.md", "building/best-practices.md"]
+    tags: [exact-term]
+    note: >-
+      A punctuation-leading literal (".dockerignore") that appears in seven Docker
+      files and zero Kubernetes ones — the cleanest BM25-vs-dense comparison in the
+      build-fundamentals area. Dense already nails it: rank 1 at 0.841 on the
+      concepts/context.md syntax section, with cache/optimize.md at rank 3. The
+      interesting Phase 3 outcome is whether fusion holds 0.841, since `floor` reads
+      whatever score the last stage wrote.
+
+  # ------------------------------------------------- Dockerfile instructions
+
+  - id: dkr-copy-from-stage
+    question: "What does COPY --from do in a Dockerfile?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/multi-stage.md"]
+    tags: [exact-term]
+    note: >-
+      A flag-form literal, and MRR headroom by construction: top-1 is
+      concepts/context.md at 0.860 — a chunk that says COPY "can't refer to local
+      files" without a context and never mentions --from — while the page carrying
+      the actual syntax is rank 2 (0.843). A reranker that cannot separate "mentions
+      COPY" from "documents COPY --from" is not reading the question. Distinct from
+      dkr-multi-stage-basics, which asks what a multi-stage build *is*.
+
+  - id: dkr-add-vs-copy
+    question: "What is the difference between ADD and COPY?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/best-practices.md"]
+    tags: [exact-term]
+    note: >-
+      Two uppercase three-letter tokens where "ADD" also matches ordinary English
+      across both doc sets — the same term-weighting trap as dkr-arg-vs-env, on a
+      different instruction pair. Retrieved at 0.757 with four of five chunks from
+      best-practices.md, but rank 1 is its ENV/secrets example and the real "ADD or
+      COPY" section is rank 2; hit-rate is satisfied at rank 1 only because the match
+      is doc-level, so watch citation validity, not hit-rate, on this one.
+
+  - id: dkr-syntax-directive
+    question: "What does the syntax directive at the top of a Dockerfile do?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["concepts/dockerfile.md"]
+    tags: [exact-term]
+    note: >-
+      The `# syntax=docker/dockerfile:1` line appears verbatim in 19 Docker files,
+      almost always as boilerplate in an unrelated example — so this question tests
+      whether retrieval can find the page that *explains* a token against 18 pages
+      that merely contain it. It does today: concepts/dockerfile.md at rank 1 (0.860)
+      and also ranks 2 and 5, with checks.md and bake/contexts.md as the distractors.
+
+  - id: dkr-default-command
+    question: "How do I make my image run a command by default when someone starts it?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/best-practices.md"]
+    tags: [paraphrase]
+    note: >-
+      Never says CMD, ENTRYPOINT or "instruction" — the words the answer is built
+      from. Lands on the CMD/ENTRYPOINT sections of best-practices.md at rank 1
+      (0.773, plus ranks 2 and 4), so the retrieval headroom is small; what this
+      question actually watches is source accuracy (F10). Ranks 3 and 5 are
+      Kubernetes security/security-checklist.md chunks about images that "start with
+      an unprivileged user", which are quotable and would be the wrong doc set to
+      cite. The full CMD/ENTRYPOINT reference lives in /reference/dockerfile.md,
+      outside the slice, so a correct answer here is the best-practice guidance
+      ("ENTRYPOINT sets the image's main command, CMD the default flags") and not a
+      flag-by-flag reference.
+
+  - id: dkr-image-layers
+    question: "What is an image layer and what creates one?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["concepts/dockerfile.md", "cache/_index.md"]
+    tags: []
+    note: >-
+      Layers are the one build concept the slice explains in two places and neither
+      is a "layers" page: cache/_index.md draws the layer stack for the cache
+      (rank 1, 0.750) and concepts/dockerfile.md states that each instruction
+      produces one (rank 2, 0.742). A correct answer therefore needs two documents,
+      like k8s-init-vs-sidecar-containers — one citation is a partial answer. The
+      lowest-margin answerable question in this slice (+0.200 over floor).
+
+  # ------------------------------------------------- base images
+
+  - id: dkr-minimal-scratch-image
+    question: "Can I build an image that contains nothing but my compiled program?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/base-images.md"]
+    tags: [paraphrase]
+    note: >-
+      The paraphrase route to `FROM scratch`: no "scratch", no "base image", no
+      "minimal". building/base-images.md — seven chunks, no question in the current
+      set — reaches ranks 2 and 3 (0.747) behind exporters/_index.md at 0.750, which
+      is about `--output` tarballs and would be a confidently wrong answer. Rank 2 on
+      a 0.003 margin is exactly the gap a reranker should open.
+
+  # ------------------------------------------------- multi-platform build args
+
+  - id: dkr-targetplatform-arg
+    question: "What is TARGETPLATFORM?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["building/multi-platform.md", "building/variables.md"]
+    tags: [exact-term]
+    note: >-
+      A bare single-token query — no verb, no context — on a literal that appears in
+      only three files. Retrieval holds up (building/multi-platform.md rank 1 at
+      0.762, building/variables.md rank 2 at 0.712) but this is the weakest top-1 of
+      the five exact-term questions here, and ranks 3-5 are bake and CI pages that
+      merely use the variable. Asks what the build arg *is*; dkr-multi-platform asks
+      how to build for two architectures.
+
+  # ------------------------------------------------- build checks
+
+  - id: dkr-build-checks-warnings
+    question: "Why is my build printing warnings about my Dockerfile?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["checks.md"]
+    tags: [paraphrase]
+    note: >-
+      The hardest question in this slice and the best rewriter case: the page is
+      called "Checks" and the question says "warnings", so the vocabulary never
+      meets. checks.md scrapes in at rank 3 (0.787) under bake/compose-file.md
+      (0.797) and bake/expressions.md (0.788) — both matched on the word "printing",
+      which in bake means `--print`. Three of the five chunks are bake pages that
+      cannot answer it, so this is also a live fabrication risk for the generator.
+
+# ---------------------------------------------------------------- DISCARDED
+#
+# Measured against the same index and dropped, per the rule that every question must
+# have a supporting document in the baseline top 5. Recorded here so the next person
+# does not re-derive them:
+#
+#   "Why does deleting a file in a later step not make my image any smaller?"
+#       Top-1 is KUBERNETES scheduling-eviction/node-pressure-eviction.md (0.707),
+#       rank 2 architecture/garbage-collection.md, rank 5 finalizers.md. The two
+#       Docker hits are best-practices.md on UID/GID and concepts/context.md on
+#       .dockerignore pattern matching — neither answers it. A tempting
+#       paraphrase + cross-source trap with no retrievable answer: discarded.
+#
+#   "My image works fine on my laptop but crashes on the server with an exec format
+#    error"
+#       building/multi-platform.md never appears; top-1 is
+#       ci/github-actions/multi-platform.md (0.670), a CI workflow page. "exec format
+#       error" appears nowhere in the corpus. Also a near-duplicate of the existing
+#       dkr-multi-platform. Discarded on both counts.
+#
+#   "Why should I avoid running my container process as root?"
+#       All five hits are Kubernetes (workloads/pods/user-namespaces.md 0.812,
+#       security/linux-kernel-security-constraints.md, storage/volumes.md,
+#       windows/intro.md x2). The slice's own guidance (best-practices.md § USER) is
+#       not retrieved at all, and the question is ambiguous about which doc set owns
+#       the answer. Discarded.
+#
+# Considered, supported, but left out to avoid a third question on concepts/context.md:
+#
+#   "Why does the builder need my whole project folder?"
+#       concepts/context.md at rank 2 (top-1 metadata/attestations/slsa-provenance.md
+#       0.733). A usable hard paraphrase if a context-transfer question is wanted.
+#
+#   "Why does my build take a long time sending files before it starts running
+#    anything?"
+#       Harder still — concepts/context.md absent; cache/optimize.md (which holds the
+#       "Exclude with .dockerignore" section) at rank 2, top-1 best-practices.md
+#       0.693 on apt-get caching.
+
+  # --------------------------------------------------------------------------
+  # Docker bake, cache, BuildKit and CI
+  # (merged from candidates/docker-bake-ci.yaml)
+  # --------------------------------------------------------------------------
+
+
+  # ------------------------------------------------------- cache backends & GC (4)
+
+  - id: dkr-gc-reserved-space
+    question: "What does reservedSpace do in BuildKit garbage collection?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["cache/garbage-collection.md"]
+    tags: [exact-term]
+    note: >-
+      A camelCase TOML key that exists in 11 chunks of exactly one page and nowhere else
+      in the corpus. Dense already nails it — top-1 0.805 and all five hits are
+      garbage-collection.md, expected doc at rank 1 — so this is the control for the
+      exact-term class: BM25 must at worst tie. A Phase 3 regression here means fusion
+      is diluting a term only one document contains.
+
+  - id: dkr-inline-cache-build-arg
+    question: "How do I set BUILDKIT_INLINE_CACHE=1?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["cache/backends/inline.md"]
+    tags: [exact-term]
+    note: >-
+      The sharpest BM25 test in this area: the literal appears in ONE chunk of the whole
+      index (cache/backends/inline.md L19-39), and dense still ranks the generic
+      cache/backends/_index.md above it — top-1 0.802, expected doc rank 2 at 0.784, a
+      17-thousandths gap. A term with document frequency 1 that a lexical arm cannot
+      pull to rank 1 is evidence the BM25 arm is not weighting rarity at all.
+
+  - id: dkr-cache-gha-backend
+    question: "What does cache-to type=gha do in a GitHub Actions workflow?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["cache/backends/gha.md", "ci/github-actions/cache.md"]
+    tags: [exact-term]
+    note: >-
+      MRR headroom on a key=value literal. Top-1 (0.856) is
+      ci/github-actions/github-builder/_index.md, which only USES `cache-to: type=gha`
+      in an example workflow; the page that documents the backend's parameters is rank 2
+      (0.845) and holds ranks 2-5. hit-rate@5 cannot see this question move — it is
+      already a hit — so it only pays off if MRR is reported, which is docs/EVAL.md's
+      stated reason for tracking both.
+
+  - id: dkr-cache-registry-backend
+    question: "How do I export build cache to a registry with type=registry?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["cache/backends/registry.md", "cache/backends/_index.md"]
+    tags: [exact-term]
+    note: >-
+      The same shape as dkr-cache-gha-backend for the most-used backend, and the same
+      trap from the other direction: top-1 (0.852) is ci/github-actions/cache.md — a
+      workflow example — with cache/backends/_index.md at rank 2 (0.815) and the
+      dedicated registry page at rank 3 (0.804). `type=registry` is in 24 chunks across
+      six pages, so unlike reservedSpace this is an exact term with HIGH document
+      frequency: the pair of them is how you tell whether Phase 3 helps because of the
+      literal or because of its rarity.
+
+  - id: dkr-ci-cold-cache
+    question: "My GitHub Actions build starts cold every time and nothing is reused between runs. What do I add?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["ci/github-actions/cache.md", "cache/backends/gha.md"]
+    tags: [paraphrase]
+    note: >-
+      Names no mechanism: not "cache", not "cache-to", not "gha", not "backend" — the
+      way the problem is actually reported. The weakest-scoring answerable candidate
+      here (top-1 0.742) and the only one whose top-1 is a hub page with no cache
+      guidance in it at all (ci/github-actions/_index.md); cache/backends/gha.md reaches
+      rank 2 (0.730) and ci/github-actions/cache.md only ranks 4-5, two thousandths
+      above an unrelated slsa-provenance JSON blob at rank 3. This is the rewriter's
+      case in this area: the margin over floor is +0.192, the narrowest in the file.
+
+  # ------------------------------------------------------- attestations (2)
+
+  - id: dkr-provenance-mode-max
+    question: "What does mode=max mean for a provenance attestation?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["metadata/attestations/slsa-provenance.md"]
+    tags: [exact-term]
+    note: >-
+      A DELIBERATE collision with dkr-cache-mode-max: the same literal `mode=max` means
+      one thing for a cache export (cache/backends/_index.md) and another for an
+      attestation, and only the surrounding words separate them. Retrieval keeps them
+      apart today — top-1 0.850, ranks 1-4 all slsa-provenance.md — so if a lexical arm
+      that keys on `mode=max` starts returning cache pages for this question, or
+      attestation pages for dkr-cache-mode-max, the pair catches it. Merge both or
+      neither.
+
+  - id: dkr-sbom-inspect
+    question: "How do I find out which packages are inside the image I just built?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["metadata/attestations/sbom.md"]
+    tags: [paraphrase]
+    note: >-
+      Never says "SBOM", "attestation", "SPDX" or "imagetools" — the four words the
+      answering page is built from. Top-1 (0.771) is the attestations overview's raw
+      SPDX example, which shows what an SBOM looks like but not how to get one; the page
+      that gives the command is rank 2 (0.770), one thousandth behind. A reranker
+      reading the question's intent ("how do I find out") should separate the
+      how-to page from the sample document; nothing else in this file distinguishes
+      those two failure modes.
+
+  # ------------------------------------------------------- exporters & BuildKit (2)
+
+  - id: dkr-exporter-local-vs-tar
+    question: "What is the difference between the local and tar exporters?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["exporters/local-tar.md", "exporters/_index.md"]
+    tags: [exact-term]
+    note: >-
+      Exporter coverage, which the fixed set has none of, on two bare English words used
+      as product names — the failure mode dkr-driver-difference tests for driver names.
+      Clean baseline: top-1 0.842 is exporters/local-tar.md at rank 1, with the exporters
+      index behind it. Included as the area's sanity case: if this one breaks, the
+      exporters subtree is not being retrieved at all.
+
+  - id: dkr-buildkit-syntax-frontend
+    question: "How do I pin the Dockerfile frontend version with BUILDKIT_SYNTAX?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["buildkit/frontend.md"]
+    tags: [exact-term]
+    note: >-
+      The only BuildKit-internals question in the file, and a two-chunk literal
+      (buildkit/frontend.md) competing with a 19-chunk page about the `# syntax=` comment
+      that everyone writes instead (concepts/dockerfile.md). Top-1 0.862 is the right
+      page at rank 1, but rank 2 is concepts/dockerfile.md at 0.860 — a two-thousandth
+      margin, so this question is one scoring-scale change away from flipping. That makes
+      it a good watch on the Phase 2/3 score rewrite that docs/EVAL.md warns about.
+
+  # ------------------------------------------------------- bake (2)
+
+  - id: dkr-bake-file-formats
+    question: "What file formats can a bake file be written in?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["bake/introduction.md", "bake/_index.md"]
+    tags: [paraphrase]
+    note: >-
+      Asks for HCL, JSON and Compose without naming any of them — "file formats" is the
+      user's word, "The Bake file format" is the doc's heading. Top-1 0.813 is
+      bake/introduction.md at rank 1 and bake/_index.md is rank 3 (0.800); both state the
+      answer in one sentence. bake/compose-file.md at rank 2 (0.801) is a partially
+      correct neighbour — it documents one of the three formats — so this question also
+      watches whether the generator cites the page that ANSWERS over the page that is
+      merely adjacent.
+
+  - id: dkr-bake-override-tags
+    question: "How do I override the tags of a bake target from the command line?"
+    class: docker-answerable
+    expect_source: docker
+    expect_docs: ["bake/overrides.md"]
+    tags: [exact-term]
+    note: >-
+      The best MRR headroom in the file and a cross-question trap: top-1 (0.869) is
+      bake/inheritance.md — the gold document of the EXISTING dkr-bake-inheritance — and
+      it wins because it happens to use `tags` in its inheritance example. The page that
+      documents CLI overrides is rank 2 (0.832) and holds ranks 2, 3 and 5. Two
+      questions whose correct answers are each other's top-1 distractor is exactly the
+      case a cross-encoder should fix and a bag-of-words arm might make worse.
+
+  # ------------------------------------------------------- should-refuse (1)
+
+  - id: refuse-gitlab-ci
+    question: "How do I set up a GitLab CI pipeline to build and push my image?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The CI-side mirror of refuse-kubeadm-upgrade: in-domain, outside the slice. The
+      corpus mentions GitLab in seven chunks, and in ci/_index.md it appears only as a
+      link OUT to docs.gitlab.com — there is not one line of GitLab configuration in the
+      index. Scores 0.798, well clear of floor=0.55, and all five hits are complete,
+      quotable GitHub Actions workflow YAML, so gate 1 cannot catch it and a generator
+      that pattern-matches "CI pipeline" will hand back a `.github/workflows` file for a
+      `.gitlab-ci.yml` question. Highest-risk fabrication of the candidates.
+
+  # --------------------------------------------------------------------------
+  # Near-miss refusals — every one scores ABOVE the floor, so only gate 2 can catch them
+  # (merged from candidates/refusals.yaml)
+  # --------------------------------------------------------------------------
+
+
+  - id: refuse-docker-named-volume
+    question: "How do I create a Docker named volume and mount it into a container so my Postgres data survives a restart?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      Scores 0.813, and the top-1 chunk is the single most quotable wrong answer in the
+      corpus: building/best-practices.md's "### VOLUME" section, which is about the
+      Dockerfile VOLUME *instruction*, not about runtime volume management. The corpus
+      has zero chunks containing "docker volume create" or "named volume"; the only
+      "docker volume" mentions (3, all builders/drivers/docker-container.md) are
+      `docker volume ls` listing BuildKit's own state volume. Kubernetes
+      storage/volumes.md also lands at rank 4, so the model has two adjacent vocabularies
+      to borrow from and no instructions to follow. The real answer — `docker volume
+      create` plus `-v pgdata:/var/lib/postgresql/data` — is not in the index.
+
+  - id: refuse-docker-bridge-dns
+    question: "How do I put two containers on the same user-defined bridge network so they can reach each other by name?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      Scores 0.730 with a mixed top 5 — Kubernetes windows-networking.md and pods/_index
+      (containers in a Pod sharing a network namespace), Docker buildkit/configure.md's
+      "### Bridge networking" section, and builders/drivers/docker-container.md, which
+      contains the literal command `docker network create foonet`. Every ingredient of a
+      fabricated answer is present and none of it is the answer: the one `docker network
+      create` chunk is about giving a *builder* a network, and the corpus has zero chunks
+      containing "user-defined bridge". Container-to-container DNS resolution is Docker
+      networking documentation, which is outside the manuals/build slice.
+
+  - id: refuse-docker-run-restart
+    question: "What are the valid values of the docker run --restart flag?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The sharpest cross-source trap in this batch: 0.779, and ranks 1, 3 and 4 are
+      Kubernetes pod-lifecycle.md chunks that enumerate `Always` / `OnFailure` / `Never`
+      — a complete, confident, WRONG list (docker run takes no/on-failure/always/
+      unless-stopped). Exactly one chunk in the corpus contains "--restart"
+      (debug/opentelemetry.md, `docker run -d --name jaeger ... --restart unless-stopped`
+      in a tracing setup), and it documents nothing about the flag. A fabricated answer
+      here is also a source-accuracy failure (F10), not just a grounding failure.
+
+  - id: refuse-swarm-scale-service
+    question: "How do I scale a service to five replicas in Docker Swarm?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      "swarm" appears in ZERO of the 4,908 chunks, yet this scores 0.780 because every
+      other word is in-domain: the top 5 is Kubernetes Deployment/ReplicationController
+      and workloads/management.md, including deployment.md's "### Replicas
+      `.spec.replicas`" section. The plausible failure is a `kubectl scale` answer to a
+      Swarm question — topically fluent, cited, and wrong doc set. Tests that
+      "service" + "replicas" being Kubernetes vocabulary does not license answering a
+      Docker orchestration question.
+
+  - id: refuse-docker-desktop-wsl2
+    question: "How do I install Docker Desktop on Windows with the WSL 2 backend?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      Scores 0.741. Docker Desktop is named in 24 chunks across the build manuals
+      (multi-platform, buildkit/_index, cache/garbage-collection) and WSL in one
+      (building/cdi.md, on mounting WSL libraries into a build container) — so the
+      product is everywhere and its installation is nowhere: zero chunks contain
+      "install Docker". The corpus talks about *configuring* a Docker Desktop builder,
+      which is one step past where the question starts.
+
+  - id: refuse-etcd-backup-restore
+    question: "How do I back up and restore the etcd datastore of my cluster?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The Kubernetes-side /docs/tasks boundary test, taken from a different direction
+      than refuse-kubeadm-upgrade: etcd is named in 32 concept chunks
+      (architecture/_index, security/*), but exactly one of them mentions backups at all
+      — api-server-bypass-risks.md, "The only clients that need access are the Kubernetes
+      API server and any backup tooling that you use" — and none contains "etcd backup"
+      or "snapshot save". Lowest score in this batch at 0.709, still comfortably over the
+      floor, with five security- and storage-hardening chunks that are quotable and
+      useless for the question asked.
+
+  - id: refuse-control-plane-sizing
+    question: "What are the minimum CPU and memory requirements to run the Kubernetes control plane on a Linux node?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      Scores 0.816, and the danger is rank 2: windows/intro.md carries the only hardware
+      list in the corpus — "4 CPU cores or more ... 8GB or more of RAM ... 50GB or more
+      of free disk space" — which is for WINDOWS worker nodes and is explicitly prefaced
+      "They are not intended to represent minimum requirements". A model that quotes it
+      produces a correctly-formatted citation attached to an answer about the wrong node
+      type and the wrong OS. Rank 1 (advanced-pod-config.md) and ranks 3-4
+      (manage-resources-containers.md) are about *container* requests and limits — the
+      other way to fabricate this. Sizing a control plane lives in /docs/setup, outside
+      the concepts slice.
+
+  - id: refuse-helm-values-override
+    question: "How do I override the image tag in a Helm chart's values file?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      A structural collision rather than a vocabulary one: 0.720, top-1 is Docker
+      bake/overrides.md showing `variable "TAG" { default = "foo" }` — genuinely about
+      overriding an image tag from a values-like file, just the wrong tool entirely.
+      Helm is named in 15 chunks, all incidental (common-labels.md's
+      `app.kubernetes.io/managed-by` conventions, addons.md links); "values.yaml" appears
+      in zero. The failure mode to catch is answering the shape of the question while
+      silently swapping Helm for Bake.
+
+  - id: refuse-gitlab-ci-pipeline
+    question: "How do I write a GitLab CI pipeline that builds and pushes a Docker image?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The highest-scoring candidate at 0.834, and the likeliest fabrication of the whole
+      batch: all five retrieved chunks are complete, copy-pasteable GitHub Actions
+      workflow YAML from ci/github-actions/*. The corpus covers exactly one CI system,
+      and GitLab appears only as a link out (ci/_index.md) and as a `CI_JOB_TOKEN`
+      auth-header example for `docker build` (building/secrets.md) — no `.gitlab-ci.yml`,
+      no stages, no runner config. The tempting wrong behaviour is to hand over the
+      GitHub Actions workflow with the citation intact, which would pass the citation
+      gate's tag-matching while answering a question the docs do not answer.
+
+  - id: refuse-terraform-namespace
+    question: "How do I create a Kubernetes namespace with the Terraform kubernetes provider?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      Scores 0.812 with four of five chunks from the namespaces concept page and one
+      from Docker's builders/drivers/kubernetes.md, which contains
+      `kubectl create namespace buildkit`. Terraform is named in a single chunk
+      (policies/usage.md, in passing). The corpus fully explains what a namespace IS, so
+      the fabrication is easy and specific: answer with YAML or kubectl and quietly drop
+      the provider the question asked about. A correct refusal has to notice that the
+      retrieved text never mentions Terraform.
+
+  - id: refuse-ecr-login
+    question: "How do I push an image to Amazon ECR and authenticate with the AWS CLI?"
+    class: should-refuse
+    expect_source: null
+    expect_docs: []
+    tags: [near-miss]
+    note: >-
+      The other-cloud near-miss, which the current set lacks entirely (docs/EVAL.md's
+      refuse-lambda example was never added). Scores 0.729: top-1 is bake/compose-file.md,
+      whose example file contains a service literally named `aws`, with
+      ci/github-actions chunks about pushing images behind it. "ECR" appears twice in the
+      whole corpus, both in passing (cache/backends/_index.md listing registries that
+      hold cache, containers/images.md on credential providers); "aws ecr" and
+      "get-login-password" appear zero times. Registry *push* mechanics are documented,
+      so the model can answer the generic half and invent the authentication half — the
+      partial-grounding case gate 2 exists for.

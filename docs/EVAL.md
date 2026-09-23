@@ -55,8 +55,13 @@ Each entry names the chunk(s) that *should* be retrieved, so hit-rate is checkab
 - **Near-miss refusals** — *"how do I configure an AWS Lambda?"* is easy. *"how does Podman
   rootless networking work?"* is adjacent to the corpus and much harder to refuse correctly.
   A refusal set made only of easy misses proves nothing.
-- **Both-source questions** — *"how do I limit container memory?"* is answerable from either
-  doc set; check the citation names whichever it actually used.
+- **Both-source questions** — answerable from either doc set; check the citation names
+  whichever it actually used. These are **rare in practice**: the Docker slice is
+  `manuals/build` only, so the two corpora barely overlap. *"how do I limit container
+  memory?"* was this doc's original example and is **not** one — measured, all five hits
+  are Kubernetes, because `docker run --memory` lives in Docker's engine docs, not the
+  build manuals. GPU access (Docker CDI ÷ Kubernetes device plugins) is the one that
+  actually holds. Verify a both-source candidate against the index before trusting it.
 
 ## Metrics
 
