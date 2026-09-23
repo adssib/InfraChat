@@ -56,6 +56,7 @@ from typing import Any, Iterable, Sequence
 import yaml
 
 from infrachat.answer.citations import parse_tag_candidates
+from infrachat.answer.prompt import SYSTEM_PROMPT_SHA
 from infrachat.answer.prompt import offered_tags
 from infrachat.config import Config
 from infrachat.models import Answer
@@ -245,6 +246,11 @@ class Result:
     cited_sources: list[str] = field(default_factory=list)
     source_ok: bool | None = None
     answer_chars: int | None = None
+    #: The answer or refusal verbatim. Stored because a refusal-correctness metric you
+    #: cannot inspect afterwards is barely a metric: investigating the one fabrication in
+    #: the 30-question run meant re-running the question, which returned a *different*
+    #: answer (temperature=0 is not a determinism guarantee across a provider's batching).
+    answer_text: str | None = None
     latency_ms: float | None = None
     retrieval_ms: float | None = None
     llm_calls: int | None = None
@@ -293,6 +299,7 @@ def _score_answer(q: Question, r: Retrieval, answer: Answer, cfg: Config, res: R
     """Fill in grounding and refusal outcomes from the Answer."""
     res.refused = not answer.grounded
     res.answer_chars = len(answer.text)
+    res.answer_text = answer.text
 
     if res.refused:
         # Which gate did the work matters: F8 is free and model-free, F9 costs a call.
@@ -563,6 +570,10 @@ def _header(cfg: Config, deps: Deps, questions: Sequence[Question], root: Path) 
         "questions_by_class": dict(Counter(q.cls for q in questions)),
         "question_set": str(cfg.eval.question_set),
         "question_set_sha256": hashlib.sha256(question_set.read_bytes()).hexdigest()[:12],
+        # The system prompt is an experiment variable like the embedder or chunk size,
+        # and it lives in an easily-edited text file. Without this, a prompt tweak
+        # changes the numbers with nothing in the record saying so.
+        "system_prompt_sha": SYSTEM_PROMPT_SHA,
         "corpus": [
             {
                 "source": s.name,
