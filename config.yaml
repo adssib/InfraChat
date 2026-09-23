@@ -32,11 +32,14 @@ infrachat:
                                      # out-of-distribution trip-wire, not a classifier:
                                      # it can carry ~2 of 21 refusals here, gate 2
                                      # carries the other 19.
+    hybrid:                          # Phase 3 — see the PHASE 3 note below
+      enabled: true
+      fusion: rrf
 
   eval:
     question_set: "eval/questions.yaml"
     results_dir: "eval/runs"
-    run_label: "+reranker"
+    run_label: "+hybrid"
 
   # The generator. `ingest` and `ask --retrieval-only` still run without a key.
   llm:
@@ -57,16 +60,14 @@ infrachat:
   # The reranker reorders; it does NOT rewrite `score`, so `floor` above keeps
   # meaning what eval/floor-tuning.md tuned it to mean. See the module docstring.
   rerank:
-    enabled: true
+    enabled: false
     model: "Xenova/ms-marco-MiniLM-L-6-v2"
 
   # ---------------------------------------------------------------- PHASE 3
-  # A BM25 arm (SQLite FTS5) fused with dense results by reciprocal rank.
-  # Enabling this needs a re-ingest — it adds an index to the offline path.
-  # retrieval:
-  #   hybrid:
-  #     enabled: true
-  #     fusion: rrf
+  # retrieval.hybrid (above): a BM25 arm (SQLite FTS5) fused with dense by reciprocal
+  # rank. The keyword index is derived from the chunk table on demand — no re-ingest.
+  # Measured: 71% of the reranker's MRR gain at 0.8% of its latency; redundant on top
+  # of the reranker (MRR 0.867 -> 0.862). ADR-0009.
 
   # ---------------------------------------------------------------- PHASE 4
   # A small, cheap LLM rewrites the question before retrieval. Costs an LLM call

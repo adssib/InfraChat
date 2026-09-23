@@ -18,6 +18,7 @@ and add a row below. When a decision changes, write a *new* ADR and mark the old
 | [0006](0006-pluggable-sources.md) | A doc set is a YAML entry, not a code change | 1 | Accepted |
 | [0007](0007-citation-check-verifies-provenance-not-entailment.md) | The citation check verifies provenance, not entailment — bounds [0001](0001-refuse-over-fabricate.md) | 1 | Accepted |
 | [0008](0008-reranker-orders-dense-scores.md) | The reranker decides order; the dense retriever still decides score | 2 | Accepted |
+| [0009](0009-hybrid-fusion-keeps-cosine-and-substitutes-for-rerank.md) | Hybrid fusion keeps the cosine score, and substitutes for the reranker rather than stacking on it | 3 | Accepted |
 
 **Start with [ADR-0001](0001-refuse-over-fabricate.md)** — it's the decision the rest of the
 system is arranged around.

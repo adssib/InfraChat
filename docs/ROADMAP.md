@@ -165,17 +165,35 @@ it harder. See ADR-0008 for why the reranker decides *order* but not *score*.
 make gate 1 stricter. `dkr-shrink-image` ranks better (RR 0.5 → 1.0) but its promoted
 chunk scores 0.639 against the 0.65 floor — predicted in ADR-0008 before the run.
 
-### What Phases 1-2 tell us about Phases 3-4
+### Phase 3 — + hybrid search (BM25 + RRF)
 
-- **Phase 3 (BM25 hybrid) has very little room left.** Its premise was exact-term queries.
-  Dense retrieval already scored 0.833 there, and reranking lifted it to **0.919**. The
-  strongest remaining test is `dkr-inline-cache-build-arg`: `BUILDKIT_INLINE_CACHE` is in
-  exactly one chunk of 4,908. Expect a small or negative delta, and report it as a result.
+**Retrieval, all 87 questions — final** (ADR-0009):
+
+| arm | MRR | exact-term | paraphrase | cross-source | hit@5 | added latency |
+|---|---|---|---|---|---|---|
+| dense (baseline) | 0.788 | 0.833 | 0.667 | 0.375 | 0.970 | — |
+| **+hybrid** | **0.845** | **0.914** | 0.699 | 0.425 | 0.955 | **+6 ms** |
+| +reranker | 0.867 | 0.919 | 0.727 | 0.875 | 0.985 | +821 ms |
+| +reranker +hybrid | 0.862 | 0.917 | 0.710 | 0.833 | 0.970 | +827 ms |
+
+**Verdict: hybrid is a substitute for the reranker, not an addition to it.** On its own it
+buys 71% of the reranker's MRR gain at 0.8% of its latency — and the exact-term win BM25
+was built for is real (0.833 → 0.914). Stacked on the reranker it is redundant: 1 question
+better, 5 worse, because RRF displaces dense candidates the cross-encoder would have
+promoted. The Phase 1 baseline predicted there was little exact-term room left; it was
+right, and the negative is recorded rather than tuned away.
+
+**Generative (hybrid only, no reranker): pending** — running through the rolling token
+window. The question it answers: does hybrid avoid the refusal-recall cost the reranker
+showed? If so, hybrid-only is the better default on both axes.
+
+### What Phases 1-3 tell us about Phase 4
+
 - **Phase 4 (query rewriter) is aimed at paraphrase, now 0.727** — the lowest slice left.
   It must earn that against the latency of an extra LLM call on every query.
-- **RRF fusion (Phase 3) introduces a third score scale**, so `hits[0].score` will no longer
-  be a cosine at all. Re-run the floor *rule* from `eval/floor-tuning.md`; do not re-argue
-  the value.
+- **Every stage so far reorders without rescaling** (ADR-0008, ADR-0009), so the gate
+  still reads a dense cosine and `floor` needs no re-derivation. Phase 4 changes the
+  *query*, which changes every cosine — re-run the floor rule after it.
 
 ### Open
 
