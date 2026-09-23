@@ -213,7 +213,12 @@ def cmd_eval(args: argparse.Namespace) -> int:
     store, embedder = _open_index(cfg, root)
     try:
         deps = _build_deps(cfg, store, embedder, with_llm=not args.retrieval_only)
-        summary = evaluate.run(cfg, deps, root=root, progress=not args.quiet)
+        summary = evaluate.run(cfg, deps, root=root, progress=not args.quiet, resume=args.resume)
+        if summary.get("reused"):
+            print(f"resumed: kept {summary['reused']} completed question(s) from the existing run")
+        if summary.get("daily_cap_hit"):
+            print("stopped calling the API after hitting the daily token cap — "
+                  "run again with --resume once tokens free up")
         print()
         print(evaluate.format_summary(summary))
         return 0
@@ -262,6 +267,8 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--retrieval-only", action="store_true",
                     help="score retrieval only; no LLM, no API key")
     ev.add_argument("--quiet", action="store_true", help="no per-question progress")
+    ev.add_argument("--resume", action="store_true",
+                    help="keep completed questions from the existing run file; re-run only errored ones")
     ev.set_defaults(func=cmd_eval)
 
     sv = subs.add_parser("serve", help="run the demo UI")

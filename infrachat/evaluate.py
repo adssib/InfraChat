@@ -631,8 +631,23 @@ def _resolve(path: Path, root: Path) -> Path:
 # --------------------------------------------------------------------- entry point
 
 
+#: Header fields that must match for a resumed run to stay one experiment.
+_COMPARABLE = ("question_set_sha256", "system_prompt_sha", "corpus", "embedder", "chunk",
+               "retrieval", "generator", "components")
+
+
+def _is_daily_cap(exc: BaseException) -> bool:
+    """A tokens-per-DAY limit, as opposed to a per-minute one.
+
+    The SDK's backoff handles per-minute limits. A daily cap will not clear for minutes to
+    hours, so every further call just produces another guaranteed 429.
+    """
+    text = str(exc)
+    return "tokens per day" in text or "(TPD)" in text
+
+
 def run(cfg: Config, deps: Deps, *, root: Path | None = None,
-        progress: bool = True) -> dict[str, Any]:
+        progress: bool = True, resume: bool = False) -> dict[str, Any]:
     """Run the fixed question set and return the summary.
 
     `deps` decides what is being measured — Phase 1 passes the null objects, a later phase
@@ -643,6 +658,12 @@ def run(cfg: Config, deps: Deps, *, root: Path | None = None,
     row per question in question-set order. The file is written to a temporary path and
     moved into place, so a crashed or rate-limited run cannot truncate a committed
     baseline.
+
+    `resume=True` finishes a run that was cut short. Every question that already
+    completed is kept as-is; only errored or missing ones are evaluated. The free tier
+    allows ~200K tokens per rolling 24h and a full run is ~161K, so a run interrupted by
+    the daily cap is the normal case, not an edge case. Resuming refuses if the config
+    has changed since the run started — one file must never mix two experiments.
 
     Returns the summary dict (also the value `cli.py` prints); `format_summary` renders it.
     """
@@ -660,7 +681,22 @@ def run(cfg: Config, deps: Deps, *, root: Path | None = None,
     tmp_path = out_path.with_suffix(".jsonl.partial")
 
     header = _header(cfg, deps, questions, root)
+    previous: dict[str, Result] = {}
+    if resume and out_path.exists():
+        lines = [json.loads(l) for l in out_path.read_text().splitlines() if l.strip()]
+        old_header = next((l for l in lines if l.get("record") == "header"), {})
+        changed = [k for k in _COMPARABLE if old_header.get(k) != header.get(k)]
+        if changed:
+            raise RuntimeError(
+                f"cannot resume {out_path.name}: config changed since it was recorded "
+                f"({', '.join(changed)}). Start a fresh run instead — resuming would mix "
+                f"two experiments in one file."
+            )
+        header["date"] = old_header.get("date", header["date"])
+        header["resumed"] = [*old_header.get("resumed", []), datetime.now(timezone.utc).isoformat(timespec="seconds")]
+        previous = {l["id"]: Result(**l) for l in lines if "id" in l and not l.get("error")}
     rows: list[Result] = []
+    daily_cap_hit = False
     _warm_up(deps)
     started = time.monotonic()
 
@@ -674,9 +710,22 @@ def run(cfg: Config, deps: Deps, *, root: Path | None = None,
         fh.flush()
 
         for i, q in enumerate(questions, 1):
+            if q.id in previous:
+                res = previous[q.id]
+                rows.append(res)
+                fh.write(json.dumps(res.row()) + "\n")
+                continue
+            if daily_cap_hit:
+                res = Result(id=q.id, cls=q.cls, question=q.question, tags=list(q.tags),
+                             expect_docs=list(q.expect_docs),
+                             error="skipped: daily token budget exhausted — re-run with --resume")
+                rows.append(res)
+                fh.write(json.dumps(res.row()) + "\n")
+                continue
             try:
                 res = _evaluate_one(q, cfg, deps, counter)
             except Exception as exc:                      # noqa: BLE001 — see below
+                daily_cap_hit = daily_cap_hit or _is_daily_cap(exc)
                 # One question must not cost the other 29. A free-tier rate limit, a
                 # dropped connection or a provider 500 is recorded as an error and
                 # excluded from every denominator, because scoring it as a refusal would
@@ -699,6 +748,8 @@ def run(cfg: Config, deps: Deps, *, root: Path | None = None,
     summary["results_path"] = str(out_path)
     summary["elapsed_s"] = round(time.monotonic() - started, 1)
     summary["header"] = header
+    summary["reused"] = len(previous)
+    summary["daily_cap_hit"] = daily_cap_hit
     return summary
 
 
