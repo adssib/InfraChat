@@ -37,8 +37,11 @@ harder to spot and harder to unwind.
 2. **Every optional component is a config-toggled null object.** Identity rewriter, dense-only
    retriever, pass-through reranker. Later phases swap an implementation; **the pipeline is never
    rewired.** `pipeline.py` should stay ~30 lines forever.
-3. **Held fixed across all phases:** the question set, the corpus commit, `chunk.*`, and the
-   embedder. Changing any of them invalidates comparison with earlier runs.
+3. **Held fixed across all phases:** the question set, the corpus commit, `chunk.*`, the
+   embedder, the generator model, the system prompt (`infrachat/prompts/system.txt`) and
+   `llm.max_tokens`. Changing any of them invalidates comparison with earlier runs. Every run
+   header records them; `scripts/compare_runs.py` refuses mismatched question sets and prints
+   any other config difference.
 4. **No answer renders without a citation.** An uncited answer is a refusal, not an answer.
 
 ## Stack (verified by spike, not assumed)
@@ -46,13 +49,18 @@ harder to spot and harder to unwind.
 | Piece | Choice | Note |
 |---|---|---|
 | Embeddings | `fastembed` + `BAAI/bge-small-en-v1.5` (384-dim) | **no torch** — ONNX only. Use `query_embed` / `passage_embed`; the model is asymmetric |
-| Reranker (P2) | `fastembed` `TextCrossEncoder` | `Xenova/ms-marco-MiniLM-L-6-v2` |
+| Reranker (P2) | `fastembed` `TextCrossEncoder` | `Xenova/ms-marco-MiniLM-L-6-v2`. Decides **order only** — `Retrieved.score` stays dense cosine (ADR-0008) |
 | Store | **one SQLite file** — `sqlite-vec` (vectors) + FTS5 `bm25()` (P3) + relational chunks/manifest | pre-1.0; the `store:` seam is the escape hatch |
-| LLM | Groq, OpenAI-compatible client | key from `INFRACHAT_LLM_API_KEY`, env var only |
+| LLM | Groq `openai/gpt-oss-20b`, OpenAI-compatible client | key from `INFRACHAT_LLM_API_KEY`, env var only. A **reasoning** model: hidden reasoning spends `max_tokens`. Free tier = 200K tokens/**day** ≈ one full 87-question eval run |
 | UI / CLI / config | Gradio · stdlib `argparse` · pydantic v2 | Gradio on port 7860 for Spaces |
 
-**`retrieval.floor` starts at ~0.55, not 0.35.** Measured: with bge-small, 0.35 refuses nothing —
-"how do I bake sourdough bread?" scores 0.409 against these docs. Re-tune on the real corpus.
+**`retrieval.floor` is 0.65, derived — not guessed.** Rule: `min(answerable top-1) − 1 SD` of the
+dense cosine distribution (`eval/floor-tuning.md`). No floor separates the classes on this corpus:
+77% of questions sit in the overlap band, and one refusal outscores 48 of 66 answerable questions.
+**Gate 1 is an out-of-distribution trip-wire, not a classifier** — it catches ~2 of 21 refusals; the
+citation gate carries the rest. Never tune the floor by accuracy on the eval set: the
+accuracy-maximising value scored 79.3% fitted and 75.2% held out, worse than not tuning. If a phase
+changes what `hits[0].score` means, re-run the *rule*, don't re-argue the value.
 
 ## Tests
 
@@ -69,7 +77,8 @@ integration tests, no coverage target. The **eval harness is the real quality ga
 | Inspect chunking (no writes) | `python -m infrachat ingest --dry-run -c config.yaml` |
 | Ask | `python -m infrachat ask -c config.yaml "<question>"` |
 | Inspect retrieval (no LLM) | `python -m infrachat ask --retrieval-only -c config.yaml "<question>"` |
-| Eval | `python -m infrachat eval -c config.yaml` |
+| Eval | `python -m infrachat eval -c config.yaml` (add `--retrieval-only` for a free, LLM-less run) |
+| Compare two runs | `python scripts/compare_runs.py eval/runs/A.jsonl eval/runs/B.jsonl` |
 | Demo UI | `python -m infrachat serve -c config.yaml` |
 
 ## Conventions
