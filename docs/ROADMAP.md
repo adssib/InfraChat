@@ -183,9 +183,12 @@ better, 5 worse, because RRF displaces dense candidates the cross-encoder would 
 promoted. The Phase 1 baseline predicted there was little exact-term room left; it was
 right, and the negative is recorded rather than tuned away.
 
-**Generative (hybrid only, no reranker): pending** — running through the rolling token
-window. The question it answers: does hybrid avoid the refusal-recall cost the reranker
-showed? If so, hybrid-only is the better default on both axes.
+**Generative (hybrid only, no reranker) — final, and decisive** (ADR-0011): against the
+baseline, MRR 0.795 → 0.858 with refusal recall **unchanged at 0.952**, false refusals
+halved (0.062 → 0.031), citation validity 1.000. Against the reranker it gives up 0.022
+MRR and gets back 0.095 refusal recall — the two fabrications. **Hybrid is the shipped
+default**: the only addition in four phases that improved retrieval without costing
+refusal.
 
 ### Phase 4 — + query rewriter (ADR-0010)
 

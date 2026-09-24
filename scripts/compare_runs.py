@@ -36,7 +36,7 @@ def main(a_path: str, b_path: str) -> int:
               f"{hb['question_set_sha256']}) — these runs are not comparable.")
         return 2
 
-    diffs = [k for k in ("embedder", "chunk", "retrieval", "generator", "system_prompt_sha")
+    diffs = [k for k in ("components", "rewrite", "embedder", "chunk", "retrieval", "generator", "system_prompt_sha")
              if ha.get(k) != hb.get(k)]
     la, lb = ha.get("run_label", "A"), hb.get("run_label", "B")
 

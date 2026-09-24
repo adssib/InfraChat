@@ -32,7 +32,7 @@ infrachat:
                                      # out-of-distribution trip-wire, not a classifier:
                                      # it can carry ~2 of 21 refusals here, gate 2
                                      # carries the other 19.
-    hybrid:                          # Phase 3 — see the PHASE 3 note below
+    hybrid:                          # the shipped default (ADR-0011) — see PHASE 3 below
       enabled: true
       fusion: rrf
 

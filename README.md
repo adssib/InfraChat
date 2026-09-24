@@ -20,5 +20,5 @@ Two rules the whole system is built around: **an answer without a citation is a 
 | **Why** (the ADR trail) | [docs/decisions/](docs/decisions/) |
 | **Diagrams** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#how-the-system-grows) — baseline through final |
 
-**Start here → [docs/README.md](docs/README.md)** · Status: **Phases 1–3 measured** — reranker MRR 0.788 → 0.867; hybrid gets 71% of that at 0.8% of the latency ([ROADMAP](docs/ROADMAP.md#current-status))
+**Start here → [docs/README.md](docs/README.md)** · Status: **Phases 1–4 built and measured** — hybrid retrieval ships: MRR 0.795 → 0.858 with no loss of refusal recall ([ROADMAP](docs/ROADMAP.md#current-status))
     
