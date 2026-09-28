@@ -224,5 +224,11 @@ rewrite steers retrieval; the original question is what gets judged.*
 
 - ⏳ **Entailment gate** — forced by the Phase 2 result above; see ADR-0007.
 - ⏳ Deploy to Hugging Face Spaces (image builds and runs locally; nothing has run there).
+- ⏳ **Try a small local model** — e.g. through Foundry Local on the laptop's Intel NPU
+  (Windows only; WSL2 has no `/dev/accel`). Two uses: the query rewriter, which was measured
+  on gpt-oss-20b because the small Groq models are gated, and a token-cap-free generator for
+  eval runs. A new generator changes a held-fixed setting, so it needs its own baseline
+  rather than a comparison with these runs. The public demo stays on Groq: a Space can't
+  reach local hardware.
 - ⏳ Minor chunk-content items: `_index` in citation tags (41 docs), HTML comments and
   link URLs left in chunk text. Each changes chunk content and so invalidates every run.
