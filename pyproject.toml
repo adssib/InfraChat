@@ -9,6 +9,8 @@ dependencies = [
     "fastembed>=0.8",     # embeddings (ONNX, no torch) + cross-encoder reranker (Phase 2)
     "sqlite-vec>=0.1.9",  # vector search inside the chunk store
     "openai>=1.0",        # OpenAI-compatible client -> Groq / local
+    "litestar>=2.24",     # the HTTP API: SSE, CORS, rate limiting
+    "uvicorn>=0.30",      # serves it
 ]
 
 [project.scripts]

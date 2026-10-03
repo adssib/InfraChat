@@ -300,13 +300,11 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    """Serve the HTTP API. The Gradio page was retired (docs/DEMO-PLAN.md); the Litestar
-    API that replaces it is the next milestone. Until it lands this says so and exits 2,
-    rather than failing with an import error."""
-    print("infrachat: `serve` is being rebuilt as a Litestar API (docs/DEMO-PLAN.md § 3).\n"
-          "Until then: `infrachat ask` for answers, `ask --retrieval-only` for retrieval.",
-          file=sys.stderr)
-    return 2
+    """Serve the HTTP API the web UI talks to (infrachat/api.py)."""
+    from infrachat import api
+
+    api.run(Path(args.config), host=args.host, port=args.port)
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -339,7 +337,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="keep completed questions from the existing run file; re-run only errored ones")
     ev.set_defaults(func=cmd_eval)
 
-    sv = subs.add_parser("serve", help="run the HTTP API (being rebuilt; exits 2 for now)")
+    sv = subs.add_parser("serve", help="run the HTTP API the web UI talks to")
     sv.add_argument("-c", "--config", default="config.yaml")
     sv.add_argument("--host", default="0.0.0.0")
     sv.add_argument("--port", type=int, default=8000)
