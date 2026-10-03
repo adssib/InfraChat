@@ -1,0 +1,67 @@
+# The web UI (web/) built and published to GitHub Pages: adssib.github.io/InfraChat.
+# Always up and free. With no backend session running it plays recorded runs; when the
+# 15-minute backend is up at API_URL, the same page answers live (docs/DEMO-PLAN.md § 1).
+name: CD_pages
+
+on:
+  push:
+    branches: [master]
+    paths: ["web/**", ".github/workflows/CD_pages.yml"]
+  workflow_dispatch:
+
+# The backend's address never changes: it's the infrachat-api app in the permanent
+# Container Apps environment (infra/core output `default_domain`).
+env:
+  VITE_API_URL: https://infrachat-api.greencoast-e8055e66.canadacentral.azurecontainerapps.io
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push waits rather than cancelling one mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build web/
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: install from the lockfile
+        run: npm ci
+
+      # tsc -b first: a type error fails the build rather than shipping.
+      - name: build
+        run: npm run build
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+  deploy:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
