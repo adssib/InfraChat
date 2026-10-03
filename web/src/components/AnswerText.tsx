@@ -9,7 +9,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { Citation } from "@/lib/events"
 import { cn } from "@/lib/utils"
 
-const TAG = /\[((?:kubernetes|docker):[^\]\s]+)\]/g
+// Models sometimes pad the brackets ("[ docker:x ]"); the citation check accepts that too.
+const TAG = /\[\s*((?:kubernetes|docker):[^\]\s]+)\s*\]/g
 
 function inline(text: string, cites: Map<string, Citation> | null, key: string): ReactNode[] {
   const out: ReactNode[] = []

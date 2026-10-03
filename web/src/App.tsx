@@ -5,7 +5,8 @@ import { Composer } from "@/components/Composer"
 import { Exchange } from "@/components/Exchange"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import examples from "@/examples.json"
-import { isFinished, newMessage, reduce, type Message } from "@/lib/events"
+import { isFinished, newMessage, reduce, type Message, type TraceEvent } from "@/lib/events"
+import { askLive, backendIsUp } from "@/lib/live"
 import { playReplay } from "@/lib/replay"
 
 type Group = { label: string; hint?: string; questions: string[] }
@@ -27,7 +28,16 @@ function Wordmark() {
   )
 }
 
-function ModePill() {
+type Mode = "checking" | "live" | "offline"
+
+function ModePill({ mode }: { mode: Mode }) {
+  if (mode === "live")
+    return (
+      <span className="flex items-center gap-1.5 rounded-full border border-ok/30 px-2.5 py-1 text-xs text-foreground" title="Questions are answered live by the backend">
+        <span className="size-1.5 rounded-full bg-ok" aria-hidden />
+        Live
+      </span>
+    )
   return (
     <a
       href={START_BACKEND_URL}
@@ -35,7 +45,7 @@ function ModePill() {
       title="Live answers need the backend, which runs in 15-minute sessions"
     >
       <span className="size-1.5 rounded-full bg-muted-foreground/60" aria-hidden />
-      Recorded answers
+      {mode === "checking" ? "Connecting" : "Recorded answers"}
     </a>
   )
 }
@@ -88,6 +98,11 @@ function OfflineNotice({ question }: { question: string }) {
 
 export default function App() {
   const [items, setItems] = useState<Item[]>([])
+  const [mode, setMode] = useState<Mode>("checking")
+  const modeRef = useRef<Promise<Mode> | null>(null)
+  // Ask the backend once whether a session is up; every question waits on that answer, so
+  // a ?q= link opened mid-check still goes to the right place.
+  modeRef.current ??= backendIsUp().then((up) => { const m: Mode = up ? "live" : "offline"; setMode(m); return m })
   const abort = useRef<AbortController | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
 
@@ -98,12 +113,13 @@ export default function App() {
     const ctrl = new AbortController()
     abort.current = ctrl
     const id = crypto.randomUUID()
-    setItems((xs) => [...xs, { kind: "run", m: newMessage(id, question, "replay") }])
-    const found = await playReplay(
-      question,
-      (e) => setItems((xs) => xs.map((x) => (x.kind === "run" && x.m.id === id ? { kind: "run", m: reduce(x.m, e) } : x))),
-      ctrl.signal,
-    )
+    const live = (await modeRef.current) === "live"
+    setItems((xs) => [...xs, { kind: "run", m: newMessage(id, question, live ? "live" : "replay") }])
+    const onEvent = (e: TraceEvent) =>
+      setItems((xs) => xs.map((x) => (x.kind === "run" && x.m.id === id ? { kind: "run", m: reduce(x.m, e) } : x)))
+    let found = true
+    if (live) await askLive(question, onEvent, ctrl.signal)
+    else found = await playReplay(question, onEvent, ctrl.signal)
     if (ctrl.signal.aborted) {
       // Superseded (a new conversation, or StrictMode's double-run in development).
       setItems((xs) => xs.filter((x) => !(x.kind === "run" && x.m.id === id && !isFinished(x.m))))
@@ -130,7 +146,7 @@ export default function App() {
           <button type="button" onClick={() => { abort.current?.abort(); setItems([]) }} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" aria-label="New conversation">
             <Wordmark />
           </button>
-          <ModePill />
+          <ModePill mode={mode} />
         </header>
 
         {empty ? (
