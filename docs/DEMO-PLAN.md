@@ -123,9 +123,26 @@ stateDiagram-v2
 - **Fallback:** if the M3 spike shows streaming misbehaving (for example, reasoning eating the
   stream), the UI switches to *hold, then reveal*: steps stream live, and the answer appears
   after gate 2. The event contract is the same either way.
-- The model's **reasoning** goes into the trace as a collapsed *"scratchpad"* row, if Groq
-  streams it. Its docs don't say whether `include_reasoning` reasoning arrives in the stream
-  deltas, so M3 checks that.
+- The model's **reasoning** goes into the trace as a collapsed *"scratchpad"* row. It streams
+  (M3, below), and it arrives *before* the answer.
+
+**M3 spike, 2026-10-03.** One call, the real grounded prompt for *"What is a Pod?"*, with
+`stream: true` and `include_reasoning: true`:
+
+| Measured | Result |
+|---|---|
+| Answer tokens | stream in `delta.content`: 61 pieces |
+| Reasoning | **streams** in `delta.reasoning` (an extra field, passed through by the OpenAI SDK): 143 pieces, all *before* the first answer token |
+| Timing | first reasoning token at 1.23 s, first answer token at 1.39 s, **done at 1.44 s** |
+| Tokens | 1,063 total: 849 prompt + 214 completion, of which 144 were reasoning |
+| Rate-limit headers | `x-ratelimit-limit-tokens: 8000` (per minute), `-remaining-tokens`, `-reset-tokens`, plus request limits. **The 200K/day cap is not in any header**; it only appears as an error |
+
+What it means: (1) both streams are real, so `llm.reasoning` and `llm.token` stay in the
+contract. (2) Groq is fast enough that the answer arrives as a **~0.2 s burst**, so most of the
+"live" feel comes from the trace and the reasoning, not the answer text. (3) The draft shows raw
+tags (`[kubernetes:workloads/pods/_index]`) that become `[1]` chips when gate 2 passes. That's a
+visible "verified" moment. (4) The remaining-tokens header can drive a quiet "tokens left this
+minute" readout; the daily cap has to be caught from the error.
 
 ### The ladder
 
@@ -246,12 +263,12 @@ requests send one request per rung. In order:
 | `rerank` | `{moves: [{tag, from, to}], ms}` | reranker wrapper |
 | `gate.floor` | `{passed, top_score, floor, margin}` | from `Retrieval.decision` |
 | `prompt` | `{excerpts, tokens_est}` | LLM wrapper |
-| `llm.reasoning` | `{delta}` (repeated) | LLM wrapper, if Groq streams it (M3) |
+| `llm.reasoning` | `{delta}` (repeated) | LLM wrapper, from `delta.reasoning` (confirmed in M3) |
 | `llm.token` | `{delta}` (repeated) | LLM wrapper, **rendered as a draft** |
 | `gate.citations` | `{passed, cited: [tag], invented: [tag], said_not_in_docs}` | from the `Answer` |
 | `answer` | `{text, citations: [{n, tag, doc, lines, github_url, chunk_text}]}` | after gate 2 passes, **the draft becomes this** |
 | `refusal` | `{gate: "floor" \| "citation", reason}` | instead of `answer`, **the draft is retracted** |
-| `done` | `{ms_total, tokens}` | API |
+| `done` | `{ms_total, tokens: {prompt, completion, reasoning}, ratelimit: {remaining_tokens, reset_s}}` | API, from the usage block and the `x-ratelimit-*` headers |
 | `error` | `{kind: "rate_limit" \| "daily_cap" \| "internal", message}` | API |
 
 ### Tracing without touching `pipeline.py`
@@ -392,7 +409,7 @@ flowchart LR
 |---|---|---|
 | **M1** | **Spike the deploy by hand.** `infra/core` (environment) + a minimal app from the existing image, applied from the laptop, timed to the first HTTP 200, then the app deleted | We know the startup time, and that an idle environment really costs $0 |
 | M2 | Release `index-v1` + `build-image.yml` → `ghcr.io/adssib/infrachat-api` | The image pulls publicly and `ask --retrieval-only` works in it |
-| M3 | **Spike Groq streaming**: token deltas, whether reasoning streams, rate-limit headers | `llm.reasoning` confirmed or dropped, and draft streaming confirmed (or the fallback chosen) |
+| ~~M3~~ | ✅ **Spike Groq streaming** (2026-10-03) | Both stream; reasoning first. See § 2 *Streaming the answer* |
 | M4 | `OpenAICompatClient.stream()` + tracing wrappers + `ask --trace` | The event sequence prints live for one question, and `pipeline.py` is untouched |
 | M5 | **ADR-0012**: streamed drafts and invariant 4's new wording | The decision is on record before any UI shows a draft |
 | M6 | Litestar app: `/api/ask` (SSE, one rung), `/api/meta`, `/healthz`, CORS, rate limit | `curl -N` shows steps, then tokens, then the verdict |
@@ -411,9 +428,6 @@ flowchart LR
 - **Idle environment cost** (M1). The Consumption environment should cost $0 with no app
   running; confirm in Cost Management. If it doesn't, fall back to a per-session environment
   and publish the new URL to Pages on each session.
-- **Reasoning in the stream** (M3). Groq's docs say gpt-oss returns reasoning via
-  `include_reasoning`, but not how it streams. If it doesn't stream, the trace shows a token
-  pulse in its place.
 - **Free grant on Azure for Students.** It should apply per subscription; confirm after the
   first session.
 - **No-RAG in offline mode.** There's no recorded No-RAG eval run yet. One run of the 87
