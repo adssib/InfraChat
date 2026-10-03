@@ -5,6 +5,9 @@ variable "subscription_id" {
 }
 
 variable "location" {
+  # Azure for Students only allows francecentral, northcentralus, norwayeast, westus and
+  # canadacentral (a subscription policy; eastus is refused with RequestDisallowedByAzure).
+  # canadacentral: nearest to the developer, and Groq served this account from Montreal.
   type    = string
-  default = "eastus"
+  default = "canadacentral"
 }
