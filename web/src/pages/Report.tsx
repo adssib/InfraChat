@@ -137,7 +137,13 @@ function Toc({ className }: { className?: string }) {
 
 export default function Report() {
   return (
-    <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 pt-10 pb-24 sm:px-8">
+    // The contents list is docked to the left edge, under the wordmark; the article is
+    // centred in the space beside it.
+    <main className="w-full flex-1 pt-10 pb-24 lg:grid lg:grid-cols-[minmax(220px,1fr)_minmax(0,1100px)_minmax(0,1fr)]">
+      <aside className="hidden lg:block lg:pl-7">
+        <Toc className="sticky top-28 w-[210px]" />
+      </aside>
+      <div className="min-w-0 px-4 sm:px-8">
       <header className="max-w-4xl space-y-4 pb-10">
         <h1 className="text-[clamp(1.9rem,4.5vw,2.6rem)] leading-tight font-medium tracking-tight text-balance">
           How InfraChat was built, and what measuring it taught me
@@ -158,11 +164,6 @@ export default function Report() {
         </div>
         <Toc className="glass mt-4 rounded-2xl p-4 lg:hidden" />
       </header>
-
-      <div className="grid gap-12 lg:grid-cols-[200px_minmax(0,1fr)]">
-        <aside className="hidden lg:block">
-          <Toc className="sticky top-28" />
-        </aside>
       <div className="min-w-0 space-y-16">
         <Section id="problem" title="The problem">
           <P>
