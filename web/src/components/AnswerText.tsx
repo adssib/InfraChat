@@ -12,6 +12,51 @@ import { cn } from "@/lib/utils"
 // Models sometimes pad the brackets ("[ docker:x ]"); the citation check accepts that too.
 const TAG = /\[\s*((?:kubernetes|docker):[^\]\s]+)\s*\]/g
 
+// **bold** and *italic*. Underscores are left alone: docs answers are full of
+// identifiers like BUILDKIT_INLINE_CACHE and _index.md that must not turn italic.
+const EMPHASIS = /\*\*(?=\S)([^*]+?)(?<=\S)\*\*|\*(?=\S)([^*]+?)(?<=\S)\*/g
+
+function emphasis(text: string, key: string): ReactNode[] {
+  const out: ReactNode[] = []
+  let last = 0
+  for (const m of text.matchAll(EMPHASIS)) {
+    out.push(text.slice(last, m.index))
+    out.push(m[1] !== undefined
+      ? <strong key={`${key}-${m.index}`} className="font-semibold text-foreground">{m[1]}</strong>
+      : <em key={`${key}-${m.index}`}>{m[2]}</em>)
+    last = (m.index ?? 0) + m[0].length
+  }
+  out.push(text.slice(last))
+  return out
+}
+
+// A line holding only citation tags belongs to the sentence above it. Models often end
+// with one tag per line; left alone, the chips would stack under the answer.
+const TAGS_ONLY = /^\s*(\[\s*(?:kubernetes|docker):[^\]\s]+\s*\]\s*)+$/
+
+function foldTags(prose: string): string {
+  const lines = prose.split("\n")
+  const out: string[] = []
+  for (const line of lines) {
+    if (TAGS_ONLY.test(line)) {
+      let j = out.length - 1
+      while (j >= 0 && !out[j].trim()) j--
+      if (j >= 0) {
+        out.splice(j + 1)                       // drop the blank lines in between
+        // Same page cited twice in a row reads as "1 1": keep one.
+        const seen = new Set([...out[j].matchAll(TAG)].map((m) => m[1]))
+        const fresh = [...line.matchAll(TAG)].filter((m) => !seen.has(m[1]) && seen.add(m[1])).map((m) => m[0])
+        if (fresh.length) out[j] = `${out[j].trimEnd()} ${fresh.join(" ")}`
+        continue
+      }
+    }
+    out.push(line)
+  }
+  return out.join("\n")
+}
+
+const LIST_ITEM = /^\s*(?:[-*]|\d+[.)])\s+/
+
 function inline(text: string, cites: Map<string, Citation> | null, key: string): ReactNode[] {
   const out: ReactNode[] = []
   text.split(/(`[^`\n]+`)/g).forEach((part, i) => {
@@ -25,7 +70,7 @@ function inline(text: string, cites: Map<string, Citation> | null, key: string):
     }
     let last = 0
     for (const m of part.matchAll(TAG)) {
-      out.push(part.slice(last, m.index))
+      out.push(...emphasis(part.slice(last, m.index), `${key}e${i}-${last}`))
       const c = cites?.get(m[1])
       out.push(
         c ? (
@@ -38,7 +83,7 @@ function inline(text: string, cites: Map<string, Citation> | null, key: string):
       )
       last = (m.index ?? 0) + m[0].length
     }
-    out.push(part.slice(last))
+    out.push(...emphasis(part.slice(last), `${key}e${i}-${last}`))
   })
   return out
 }
@@ -92,10 +137,27 @@ export function AnswerText({
             </pre>
           )
         }
-        return block
+        return foldTags(block)
           .split(/\n{2,}/)
           .filter((p) => p.trim())
-          .map((para, pi) => (
+          .map((para, pi) => {
+            const lines = para.split(/\s*\n/).filter((l) => l.trim())
+            // "Key points:" then items: a lead-in line followed by a list.
+            const firstItem = lines.findIndex((l) => LIST_ITEM.test(l))
+            if (firstItem !== -1 && lines.slice(firstItem).every((l) => LIST_ITEM.test(l))) {
+              const items = lines.slice(firstItem)
+              const ordered = /^\s*\d/.test(items[0])
+              const List = ordered ? "ol" : "ul"
+              return (
+                <div key={`${bi}-${pi}`} className="space-y-1.5">
+                  {lines.slice(0, firstItem).map((l, li) => <p key={li}>{inline(l, cites, `${bi}-${pi}-h${li}`)}</p>)}
+                  <List className={cn("space-y-1 pl-5 marker:text-muted-foreground", ordered ? "list-decimal" : "list-disc")}>
+                    {items.map((l, li) => <li key={li}>{inline(l.replace(LIST_ITEM, ""), cites, `${bi}-${pi}-${li}`)}</li>)}
+                  </List>
+                </div>
+              )
+            }
+            return (
             <p key={`${bi}-${pi}`} className="text-pretty">
               {para.split(/\s*\n/).map((line, li, all) => (
                 <Fragment key={li}>
@@ -104,7 +166,8 @@ export function AnswerText({
                 </Fragment>
               ))}
             </p>
-          ))
+            )
+          })
       })}
       {draft && <span className="caret" aria-hidden />}
     </div>
