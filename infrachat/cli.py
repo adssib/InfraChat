@@ -164,6 +164,77 @@ def _build_deps(cfg: Config, store: ChunkStore, embedder, *, with_llm: bool) -> 
     )
 
 
+class _TracePrinter:
+    """`ask --trace`: the event stream the UI will render, printed as it arrives.
+    Reasoning is dimmed; the answer streams as an unverified draft until gate 2 rules."""
+
+    DIM, GREEN, AMBER, RESET = ("\033[2m", "\033[32m", "\033[33m", "\033[0m") \
+        if sys.stdout.isatty() else ("", "", "", "")
+
+    def __init__(self) -> None:
+        self.streaming: str | None = None   # "reasoning" | "token" while a stream is open
+
+    def _end_stream(self) -> None:
+        if self.streaming:
+            print(self.RESET)
+            self.streaming = None
+
+    def __call__(self, e) -> None:
+        d = e.data
+        if e.type in ("llm.reasoning", "llm.token"):
+            kind = "reasoning" if e.type == "llm.reasoning" else "token"
+            if self.streaming != kind:
+                self._end_stream()
+                label = "  scratchpad  " if kind == "reasoning" else "  draft       "
+                print(f"{self.DIM if kind == 'reasoning' else ''}{label}", end="")
+                self.streaming = kind
+            print(d["delta"].replace("\n", " "), end="", flush=True)
+            return
+        self._end_stream()
+        t = e.type
+        if t == "start":
+            c = d["config"]
+            print(f"\n  ? {d['question']}   [hybrid={c['hybrid']} rerank={c['rerank']} "
+                  f"rewrite={c['rewrite']} floor={c['floor']}]")
+        elif t == "rewrite":
+            print(f"  ✓ rewrite     {'→ ' + d['query'] if d['changed'] else 'unchanged'}")
+        elif t == "embed":
+            print(f"  ✓ embed       {d['ms']:.0f} ms")
+        elif t == "retrieve.dense":
+            print(f"  ✓ dense       {d.get('count', len(d.get('hits', [])))} chunks · {d['ms']:.0f} ms")
+        elif t == "retrieve.keyword":
+            print(f"  ✓ bm25        {d['count']} chunks · {d['ms']:.0f} ms")
+        elif t == "fuse":
+            promoted = sum(1 for h in d["hits"] if h["dense_rank"] is None or h["dense_rank"] > h["rank"])
+            print(f"  ✓ fuse (rrf)  top {len(d['hits'])} · {promoted} lifted by keyword")
+        elif t == "rerank":
+            what = f"{len(d['moves'])} moved · {d['ms']:.0f} ms" if d["active"] else "off (pass-through)"
+            print(f"  ✓ rerank      {what}")
+            for h in d["hits"]:
+                print(f"      {h['rank']}. {h['score']:.3f}  {h['tag']}  {self.DIM}{h['lines']}{self.RESET}")
+        elif t == "gate.floor":
+            mark = f"{self.GREEN}✓" if d["passed"] else f"{self.AMBER}⦸"
+            print(f"  {mark} gate 1{self.RESET}      top-1 {d['top_score']:.3f} vs floor {d['floor']}")
+        elif t == "prompt":
+            print(f"  ◌ generating  ~{d['tokens_est']} prompt tokens")
+        elif t == "gate.citations":
+            mark = f"{self.GREEN}✓" if d["passed"] else f"{self.AMBER}⦸"
+            extra = f" · invented {d['invented']}" if d["invented"] else ""
+            print(f"  {mark} gate 2{self.RESET}      cited {d['cited'] or 'nothing'}{extra}")
+        elif t == "answer":
+            print(f"\n{d['text']}\n")
+            for c in d["citations"]:
+                print(f"  [{c['n']}] {c['tag']}  {self.DIM}{c['doc']} · {c['lines']}{self.RESET}")
+        elif t == "refusal":
+            print(f"\n  {self.AMBER}⦸ refused at {d['gate']}{self.RESET}: {d['detail']}\n  {d['reason']}")
+        elif t == "done":
+            u = d.get("usage") or {}
+            rl = d.get("ratelimit") or {}
+            tokens = f" · {u.get('total_tokens')} tokens" if u else ""
+            left = f" · {rl.get('remaining-tokens')} left this minute" if rl else ""
+            print(f"\n  {self.DIM}{d['ms_total'] / 1000:.2f} s{tokens}{left}{self.RESET}")
+
+
 def cmd_ask(args: argparse.Namespace) -> int:
     """One question → a cited answer, or one of the two refusals."""
     question = " ".join(args.question).strip()
@@ -187,6 +258,11 @@ def cmd_ask(args: argparse.Namespace) -> int:
                 print(f"      {preview}...")
             if not r.decision.passed:
                 print(f"\n  → would refuse: {cfg.refusal_message()}")
+            return 0
+
+        if args.trace:
+            from infrachat import trace
+            trace.answer(question, cfg, deps, _TracePrinter())
             return 0
 
         answer = answer_query(question, cfg, deps)
@@ -250,6 +326,8 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("-c", "--config", default="config.yaml")
     ask.add_argument("--retrieval-only", action="store_true",
                      help="show what retrieval found and what the gate decided; no LLM, no API key")
+    ask.add_argument("--trace", action="store_true",
+                     help="print every pipeline step as it happens, and stream the model's output")
     ask.set_defaults(func=cmd_ask)
 
     ev = subs.add_parser("eval", help="run the fixed question set")

@@ -410,7 +410,7 @@ flowchart LR
 | **M1** | **Spike the deploy by hand.** `infra/core` (environment) + a minimal app from the existing image, applied from the laptop, timed to the first HTTP 200, then the app deleted | We know the startup time, and that an idle environment really costs $0 |
 | M2 | Release `index-v1` + `build-image.yml` → `ghcr.io/adssib/infrachat-api` | The image pulls publicly and `ask --retrieval-only` works in it |
 | ~~M3~~ | ✅ **Spike Groq streaming** (2026-10-03) | Both stream; reasoning first. See § 2 *Streaming the answer* |
-| M4 | `OpenAICompatClient.stream()` + tracing wrappers + `ask --trace` | The event sequence prints live for one question, and `pipeline.py` is untouched |
+| ~~M4~~ | ✅ `OpenAICompatClient.stream()` + tracing wrappers (`infrachat/trace.py`) + `ask --trace` | Verified on an answer, a gate-1 refusal and a gate-2 refusal; `pipeline.py` untouched |
 | M5 | **ADR-0012**: streamed drafts and invariant 4's new wording | The decision is on record before any UI shows a draft |
 | M6 | Litestar app: `/api/ask` (SSE, one rung), `/api/meta`, `/healthz`, CORS, rate limit | `curl -N` shows steps, then tokens, then the verdict |
 | M7 | `web/`: Vite + shadcn + theme + fonts; composer, trace, streamed draft → verified/retracted, refusal card, examples | One question works end to end against a local API. **This is the "usable" line** |
