@@ -147,7 +147,9 @@ export default function App() {
         ) : (
           <>
             <main className="mx-auto w-full max-w-3xl flex-1 space-y-10 px-4 pt-4 pb-8 sm:px-6">
-              {items.map((it) => (it.kind === "run" ? <Exchange key={it.m.id} m={it.m} /> : <OfflineNotice key={it.id} question={it.question} />))}
+              {items.map((it) => (it.kind === "run"
+                ? <Exchange key={it.m.id} m={it.m} />
+                : <OfflineNotice key={it.id} question={it.question} />))}
               <div ref={bottom} />
             </main>
             <div className="sticky bottom-0 bg-gradient-to-t from-background from-70% to-transparent px-4 pt-6 pb-4 sm:px-6">

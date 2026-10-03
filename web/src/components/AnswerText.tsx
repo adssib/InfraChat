@@ -2,6 +2,7 @@
 // citation tags. Tags appear raw while the text is an unverified draft; once gate 2 has
 // passed they become numbered chips (the one moment of motion in the UI).
 
+import { ExternalLink } from "lucide-react"
 import { Fragment, type ReactNode } from "react"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -41,19 +42,22 @@ function inline(text: string, cites: Map<string, Citation> | null, key: string):
   return out
 }
 
+// A citation is a link: one click opens the cited page on GitHub, at the commit that was
+// indexed. Pages, not lines — chunk line numbers count the cleaned text (infrachat/links.py).
 function Chip({ c }: { c: Citation }) {
+  const cls = "chip-in mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-primary/40 bg-primary/10 px-1.5 align-[0.1em] font-mono text-[11px] font-medium text-primary transition-colors hover:bg-primary/25 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <a
-          href={`#source-${c.n}`}
-          className="chip-in mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-primary/40 bg-primary/10 px-1.5 align-[0.1em] font-mono text-[11px] font-medium text-primary transition-colors hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          {c.n}
-        </a>
+        {c.url ? (
+          <a href={c.url} target="_blank" rel="noreferrer" className={cls} aria-label={`Source ${c.n}: ${c.doc}, opens GitHub`}>{c.n}</a>
+        ) : (
+          <span className={cls}>{c.n}</span>
+        )}
       </TooltipTrigger>
-      <TooltipContent side="top" className="font-mono text-xs">
-        {c.doc} <span className="text-muted-foreground">lines {c.lines.replace(/^L/, "")}</span>
+      <TooltipContent side="top" className="flex items-center gap-1.5 font-mono text-xs">
+        {c.doc}
+        {c.url && <ExternalLink className="size-3 opacity-70" aria-hidden />}
       </TooltipContent>
     </Tooltip>
   )

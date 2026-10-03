@@ -14,7 +14,15 @@ export type Hit = {
   keyword_rank?: number | null
 }
 
-export type Citation = { n: number; tag: string; source: string; doc: string; lines: string }
+export type Citation = {
+  n: number
+  tag: string
+  source: string
+  doc: string
+  lines: string
+  passages: string[]   // what the model was shown under this tag
+  url: string | null   // the page on GitHub at the indexed commit; a citation click opens it
+}
 
 export type TraceEvent =
   | { type: "start"; data: { question: string; config: { hybrid: boolean; rerank: boolean; rewrite: boolean; floor: number } } }

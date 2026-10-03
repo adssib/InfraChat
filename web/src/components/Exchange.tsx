@@ -1,4 +1,4 @@
-import { Ban, TriangleAlert } from "lucide-react"
+import { Ban, ExternalLink, TriangleAlert } from "lucide-react"
 
 import { AnswerText } from "@/components/AnswerText"
 import { Trace } from "@/components/Trace"
@@ -25,12 +25,19 @@ function Refusal({ m }: { m: Message }) {
 
 function Sources({ m }: { m: Message }) {
   return (
-    <ol className="space-y-1 border-t pt-3">
+    <ol className="space-y-0.5 border-t pt-3">
       {m.answer!.citations.map((c) => (
-        <li key={c.n} id={`source-${c.n}`} className="flex items-baseline gap-2 font-mono text-xs text-muted-foreground">
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1 text-[10px] text-primary">{c.n}</span>
-          <span className="truncate text-foreground/80">{c.source === "kubernetes" ? "Kubernetes" : "Docker"} docs, {c.doc}</span>
-          <span className="shrink-0">lines {c.lines.replace(/^L/, "")}</span>
+        <li key={c.n}>
+          <a
+            href={c.url ?? undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="group flex items-baseline gap-2 rounded-md px-1 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1 text-[10px] text-primary">{c.n}</span>
+            <span className="truncate">{c.source === "kubernetes" ? "Kubernetes" : "Docker"} docs, {c.doc}</span>
+            {c.url && <ExternalLink className="size-3 shrink-0 self-center opacity-0 transition-opacity group-hover:opacity-70" aria-hidden />}
+          </a>
         </li>
       ))}
     </ol>
