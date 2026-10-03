@@ -13,7 +13,7 @@ variable "location" {
 }
 
 variable "github_repo" {
-  description = "owner/name of the repository whose master-branch workflows may log in."
+  description = "The repository whose master-branch workflows may log in, as GitHub writes it in the OIDC subject: owner@owner_id/repo@repo_id."
   type        = string
-  default     = "adssib/InfraChat"
+  default     = "adssib@75389300/InfraChat@1351873446"
 }

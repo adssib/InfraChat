@@ -18,8 +18,11 @@ resource "azurerm_federated_identity_credential" "github_master" {
   name                      = "github-master"
   user_assigned_identity_id = azurerm_user_assigned_identity.github.id
   issuer                    = "https://token.actions.githubusercontent.com"
-  subject                   = "repo:${var.github_repo}:ref:refs/heads/master"
-  audience                  = ["api://AzureADTokenExchange"]
+  # GitHub's subject names the owner and repository by name AND id
+  # (owner@id/repo@id), so a deleted-and-recreated repo with the same name can't inherit
+  # this trust. Measured from the token GitHub actually presented (2026-10-03).
+  subject  = "repo:${var.github_repo}:ref:refs/heads/master"
+  audience = ["api://AzureADTokenExchange"]
 }
 
 resource "azurerm_role_assignment" "github_rg" {
