@@ -21,7 +21,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 }
 
 const P = ({ children }: { children: ReactNode }) => (
-  <p className="max-w-[68ch] text-[15px] leading-7 text-foreground/85 text-pretty">{children}</p>
+  <p className="max-w-[78ch] text-[15px] leading-7 text-foreground/85 text-pretty">{children}</p>
 )
 
 function Figure({ src, alt, caption }: { src: string; alt: string; caption: ReactNode }) {
@@ -117,10 +117,28 @@ const TOC = [
   ["deploy", "How it runs"], ["limits", "What it doesn't do yet"],
 ] as const
 
+function Toc({ className }: { className?: string }) {
+  return (
+    <nav aria-label="On this page" className={className}>
+      <p className="mb-2 px-1 text-xs text-muted-foreground">On this page</p>
+      <ol className="space-y-0.5 text-sm">
+        {TOC.map(([id, label], i) => (
+          <li key={id}>
+            <a href="#/report" onClick={(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }) }}
+              className="flex gap-3 rounded-lg px-1 py-1 text-muted-foreground transition-colors hover:bg-[var(--glass)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+              <span className="w-4 font-mono text-xs leading-5 text-primary/80">{i + 1}</span>{label}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  )
+}
+
 export default function Report() {
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-10 pb-24 sm:px-6">
-      <header className="space-y-4 pb-10">
+    <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 pt-10 pb-24 sm:px-8">
+      <header className="max-w-4xl space-y-4 pb-10">
         <h1 className="text-[clamp(1.9rem,4.5vw,2.6rem)] leading-tight font-medium tracking-tight text-balance">
           How InfraChat was built, and what measuring it taught me
         </h1>
@@ -138,21 +156,14 @@ export default function Report() {
             Try it <ArrowRight className="size-4" aria-hidden />
           </a>
         </div>
-        <nav aria-label="On this page" className="glass mt-4 rounded-2xl p-4">
-          <ol className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-            {TOC.map(([id, label], i) => (
-              <li key={id}>
-                <a href={`#/report`} onClick={(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }) }}
-                  className="flex gap-3 rounded-md py-0.5 text-muted-foreground transition-colors hover:text-foreground">
-                  <span className="w-4 font-mono text-xs leading-6 text-primary/80">{i + 1}</span>{label}
-                </a>
-              </li>
-            ))}
-          </ol>
-        </nav>
+        <Toc className="glass mt-4 rounded-2xl p-4 lg:hidden" />
       </header>
 
-      <div className="space-y-16">
+      <div className="grid gap-12 lg:grid-cols-[200px_minmax(0,1fr)]">
+        <aside className="hidden lg:block">
+          <Toc className="sticky top-28" />
+        </aside>
+      <div className="min-w-0 space-y-16">
         <Section id="problem" title="The problem">
           <P>
             A standard retrieval-augmented chatbot always answers. Search never returns &ldquo;nothing&rdquo;: it hands
@@ -192,7 +203,7 @@ export default function Report() {
             interface with a do-nothing default, so turning it on is a one-line config change and the rest of the
             pipeline never changes. The two gates never change either: components can only change what reaches them.
           </P>
-          <ol className="grid gap-3 sm:grid-cols-2">
+          <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               ["Baseline", "Meaning search, both gates, and the eval harness, built first."],
               ["Reranker", "A second model re-reads the top 20 passages with the question and re-orders them."],
@@ -227,6 +238,7 @@ export default function Report() {
             Paired on the 86 questions that completed in every run. Citation validity was 1.000 in every
             configuration: no invented citations. Latency is retrieval time, measured back to back.
           </P>
+          <div className="grid gap-6 xl:grid-cols-2">
           <Figure
             src="cost-vs-gain.png"
             alt="Scatter of added latency against MRR: hybrid reaches 0.858 at +10 ms, the reranker 0.877 at +725 ms with a smaller refusal-recall bubble"
@@ -237,10 +249,11 @@ export default function Report() {
             alt="Stacked bars of correct refusals, leaks and false refusals for baseline, reranker and hybrid"
             caption="The reranker answered 2 trap questions the baseline had refused. Hybrid didn't, and halved the wrongly refused questions."
           />
+          </div>
         </Section>
 
         <Section id="lessons" title="What I learned">
-          <div className="grid gap-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <Finding title="The component that ranked best made the system less honest">
               <p>
                 The reranker lifted ranking by 0.08 MRR, the biggest gain of any component. It also turned two trap
@@ -271,11 +284,18 @@ export default function Report() {
               </p>
             </Finding>
           </div>
-          <Figure
-            src="floor-overlap.png"
-            alt="Dot plot of top similarity scores for answerable and trap questions, overlapping between 0.70 and 0.83"
-            caption="Answerable questions (top) and traps (bottom) overlap almost entirely above the floor."
-          />
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Figure
+              src="floor-overlap.png"
+              alt="Dot plot of top similarity scores for answerable and trap questions, overlapping between 0.70 and 0.83"
+              caption="Answerable questions (top) and traps (bottom) overlap almost entirely above the floor."
+            />
+            <Figure
+              src="floor-sweep.png"
+              alt="Two curves against the floor value: traps refused and good questions wrongly refused rise together above 0.70"
+              caption="Every floor that catches more traps also refuses more good questions. 0.65 came from a fixed rule, not from tuning."
+            />
+          </div>
         </Section>
 
         <Section id="deploy" title="How it runs">
@@ -299,7 +319,7 @@ export default function Report() {
         </Section>
 
         <Section id="limits" title="What it doesn't do yet">
-          <ul className="max-w-[68ch] list-disc space-y-2 pl-5 text-[15px] leading-7 text-foreground/85 marker:text-muted-foreground">
+          <ul className="max-w-[78ch] list-disc space-y-2 pl-5 text-[15px] leading-7 text-foreground/85 marker:text-muted-foreground">
             <li>
               Gate 2 proves where an answer came from, not that the passage supports it. The reranker&apos;s wrong
               answers passed it. Checking each cited sentence against its passage is the next thing to build.
@@ -321,6 +341,7 @@ export default function Report() {
             Read the decision records <ExternalLink className="size-3.5" aria-hidden />
           </a>
         </footer>
+      </div>
       </div>
     </main>
   )
