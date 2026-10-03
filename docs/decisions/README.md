@@ -21,6 +21,7 @@ and add a row below. When a decision changes, write a *new* ADR and mark the old
 | [0009](0009-hybrid-fusion-keeps-cosine-and-substitutes-for-rerank.md) | Hybrid fusion keeps the cosine score, and substitutes for the reranker rather than stacking on it | 3 | Accepted |
 | [0010](0010-query-rewriter-steers-retrieval-and-does-not-ship.md) | The query rewriter steers retrieval only — and does not ship | 4 | Accepted |
 | [0011](0011-hybrid-is-the-default-retriever.md) | Hybrid retrieval is the default; the reranker is available but off | 3 | Accepted |
+| [0012](0012-streamed-answers-are-drafts-until-gate-2.md) | Streamed answers are drafts until the citation check passes | 5 | Accepted |
 
 **Start with [ADR-0001](0001-refuse-over-fabricate.md)** — it's the decision the rest of the
 system is arranged around.

@@ -411,10 +411,10 @@ flowchart LR
 | M2 | Release `index-v1` + `build-image.yml` → `ghcr.io/adssib/infrachat-api` | The image pulls publicly and `ask --retrieval-only` works in it |
 | ~~M3~~ | ✅ **Spike Groq streaming** (2026-10-03) | Both stream; reasoning first. See § 2 *Streaming the answer* |
 | ~~M4~~ | ✅ `OpenAICompatClient.stream()` + tracing wrappers (`infrachat/trace.py`) + `ask --trace` | Verified on an answer, a gate-1 refusal and a gate-2 refusal; `pipeline.py` untouched |
-| M5 | **ADR-0012**: streamed drafts and invariant 4's new wording | The decision is on record before any UI shows a draft |
-| M6 | Litestar app: `/api/ask` (SSE, one rung), `/api/meta`, `/healthz`, CORS, rate limit | `curl -N` shows steps, then tokens, then the verdict |
-| M7 | `web/`: Vite + shadcn + theme + fonts; composer, trace, streamed draft → verified/retracted, refusal card, examples | One question works end to end against a local API. **This is the "usable" line** |
-| M8 | Citation chips + sheet with GitHub line links; evidence panel | Clicking `[1]` opens the exact lines at the indexed commit |
+| ~~M5~~ | ✅ **ADR-0012**: streamed drafts and invariant 4's new wording | On record |
+| ~~M6~~ | ✅ Litestar app (`infrachat/api.py`): `/api/ask` (SSE), `/api/meta`, `/healthz`, CORS, rate limit | `curl -N` showed steps at 0.1 s, reasoning at 1.6 s, tokens at 2.6 s, verdict at 2.7 s |
+| ~~M7~~ | ✅ `web/`: Vite + shadcn + theme + fonts; composer, trace, draft → verified/retracted, refusal card, examples; replays offline, live when `/healthz` answers | **The "usable" line** |
+| ~~M8~~ | ✅ Citation chips link straight to the page on GitHub at the indexed commit (pages, not lines: ROADMAP § Open) | Clicking `[1]` opens the cited page |
 | M9 | `pages.yml` + live/offline detection + session pill | The site is up on Pages, and says "offline" with no backend running |
 | M10 | Ladder: the No-RAG rung, the per-rung `Deps`, four columns | One trap question shows No RAG answering and the RAG rungs refusing |
 | M11 | Offline snapshot: recorded eval answers + index explorer export + results tab | Offline mode replays examples and browses chunks |

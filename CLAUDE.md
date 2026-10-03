@@ -42,7 +42,9 @@ harder to spot and harder to unwind.
    `llm.max_tokens`. Changing any of them invalidates comparison with earlier runs. Every run
    header records them; `scripts/compare_runs.py` refuses mismatched question sets and prints
    any other config difference.
-4. **No answer renders without a citation.** An uncited answer is a refusal, not an answer.
+4. **Nothing is presented as a verified answer without a citation.** An uncited answer is a
+   refusal, not an answer. The UI may stream a dimmed, labelled *draft* before gate 2 rules;
+   it becomes the answer only if gate 2 passes (ADR-0012).
 
 ## Stack (verified by spike, not assumed)
 
@@ -52,7 +54,7 @@ harder to spot and harder to unwind.
 | Reranker (P2) | `fastembed` `TextCrossEncoder` | `Xenova/ms-marco-MiniLM-L-6-v2`. Decides **order only** — `Retrieved.score` stays dense cosine (ADR-0008) |
 | Store | **one SQLite file** — `sqlite-vec` (vectors) + FTS5 `bm25()` (P3) + relational chunks/manifest | pre-1.0; the `store:` seam is the escape hatch |
 | LLM | Groq `openai/gpt-oss-20b`, OpenAI-compatible client | key from `INFRACHAT_LLM_API_KEY`, env var only. A **reasoning** model: hidden reasoning spends `max_tokens`. Free tier = 200K tokens/**day** ≈ one full 87-question eval run |
-| API / UI / CLI / config | Litestar (planned) · React on GitHub Pages (planned) · stdlib `argparse` · pydantic v2 | Gradio retired; see `docs/DEMO-PLAN.md` |
+| API / UI / CLI / config | Litestar (`infrachat/api.py`, SSE) · React + shadcn in `web/` (GitHub Pages) · stdlib `argparse` · pydantic v2 | UI dev: `cd web && npm run dev` (Node 22, `.nvmrc`) |
 
 **`retrieval.floor` is 0.65, derived — not guessed.** Rule: `min(answerable top-1) − 1 SD` of the
 dense cosine distribution (`eval/floor-tuning.md`). No floor separates the classes on this corpus:
@@ -79,7 +81,8 @@ integration tests, no coverage target. The **eval harness is the real quality ga
 | Inspect retrieval (no LLM) | `python -m infrachat ask --retrieval-only -c config.yaml "<question>"` |
 | Eval | `python -m infrachat eval -c config.yaml` (add `--retrieval-only` for a free, LLM-less run) |
 | Compare two runs | `python scripts/compare_runs.py eval/runs/A.jsonl eval/runs/B.jsonl` |
-| API (being rebuilt) | `python -m infrachat serve -c config.yaml` — exits 2 until the Litestar API lands |
+| API (the UI talks to it) | `python -m infrachat serve -c config.yaml` → :8000 |
+| Trace one question (the events the UI renders) | `python -m infrachat ask --trace "<question>"` |
 
 ## Conventions
 
