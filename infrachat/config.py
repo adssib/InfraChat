@@ -41,6 +41,11 @@ class SourceConfig(BaseModel):
     path: Path                       # root of the doc tree, relative to repo root
     include_ext: list[str]
     repo: str | None = None          # cloned by `ingest` when the path is missing
+    # Where a citation links to: the doc tree's path inside `repo`, and the commit the
+    # index was built from. Written down rather than read from git, because the deployed
+    # image has no corpus checkout. Optional: without them citations just have no link.
+    repo_path: str | None = None
+    commit: str | None = None
     clean: CleanStrategy = "plain"
     exclude_globs: list[str] = Field(default_factory=list)
     secret_patterns: list[str] = Field(default_factory=list)

@@ -24,6 +24,8 @@ sources:
     label: "Kubernetes"
     repo: "https://github.com/kubernetes/website"
     path: "corpus/kubernetes-website/content/en/docs/concepts"
+    repo_path: "content/en/docs/concepts"
+    commit: "00ace9cad04f8c65259fce8c810d3b4440ded9c6"   # the index-v1 build; citations link here
     include_ext: [".md"]
     clean: hugo                    # Hugo shortcodes: {{< note >}}, glossary_tooltip
 
@@ -31,6 +33,8 @@ sources:
     label: "Docker"
     repo: "https://github.com/docker/docs"
     path: "corpus/docker-docs/content/manuals/build"
+    repo_path: "content/manuals/build"
+    commit: "ff96ad1711065cf2e9c3f1d701dad04775834f70"   # the index-v1 build; citations link here
     include_ext: [".md", ".mdx"]
     clean: hugo
 

@@ -21,6 +21,7 @@ from infrachat import pipeline
 from infrachat.answer import citations
 from infrachat.answer.prompt import offered_tags
 from infrachat.config import Config
+from infrachat.links import source_url
 from infrachat.models import Answer, Retrieved
 from infrachat.pipeline import Deps
 from infrachat.retrieve.rerank import PassthroughReranker
@@ -43,6 +44,10 @@ def _hit(rank: int, r: Retrieved) -> dict:
     c = r.chunk
     return {"rank": rank, "tag": c.tag, "chunk_id": c.id, "source": c.source,
             "doc": c.source_doc, "lines": c.source_location, "score": round(r.score, 4)}
+
+
+def _sources(cfg: Config) -> dict:
+    return {s.name: s for s in cfg.sources}
 
 
 class TracedRewriter:
@@ -165,9 +170,18 @@ def answer(question: str, cfg: Config, deps: Deps, emit: Emit) -> Answer:
             "invented": [t for t in claimed if t not in offered],
             "said_not_in_docs": said_nid}))
         if result.grounded:
+            # Each citation carries the passage the model was shown under that tag, and
+            # a link to the page at the indexed commit — so a reader can check the claim.
+            srcs = _sources(cfg)
+            shown = d.hits[:max_chunks]
+            passages = {}
+            for h in shown:
+                passages.setdefault(h.chunk.tag, []).append(h.chunk.text)
             emit(Event("answer", {"text": result.text, "citations": [
                 {"n": i, "tag": c.tag, "source": c.source, "doc": c.source_doc,
-                 "lines": c.source_location} for i, c in enumerate(result.citations, 1)]}))
+                 "lines": c.source_location, "passages": passages.get(c.tag, []),
+                 "url": source_url(srcs.get(c.source), c.source_doc)}
+                for i, c in enumerate(result.citations, 1)]}))
         else:
             reason = ("the model said the excerpts don't answer it" if said_nid
                       else "the answer cited nothing it was shown")

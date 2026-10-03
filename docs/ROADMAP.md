@@ -224,6 +224,12 @@ rewrite steers retrieval; the original question is what gets judged.*
 
 - ⏳ **Entailment gate** — forced by the Phase 2 result above; see ADR-0007.
 - ⏳ Deploy to Hugging Face Spaces (image builds and runs locally; nothing has run there).
+- ⏳ **Citations link to lines, not just pages.** A chunk's `source_location` counts lines in
+  the *cleaned* text (frontmatter and shortcodes stripped), so `L1-10` of the Pods chunk is
+  lines 13-22 on GitHub. Recording raw-file line numbers at ingest would let citations deep-link
+  to the exact lines. Chunk text is unchanged, so retrieval and the eval are unaffected, but it's
+  a re-ingest and a new index release (`index-v2`). Until then the UI links to the page
+  (`infrachat/links.py`).
 - ⏳ **Try a small local model** — e.g. through Foundry Local on the laptop's Intel NPU
   (Windows only; WSL2 has no `/dev/accel`). Two uses: the query rewriter, which was measured
   on gpt-oss-20b because the small Groq models are gated, and a token-cap-free generator for
