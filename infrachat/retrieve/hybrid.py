@@ -17,6 +17,8 @@ derived, instead of introducing a third score scale the gate was never calibrate
 
 from __future__ import annotations
 
+import time
+
 from infrachat.embed import Embedder
 from infrachat.models import Retrieved
 from infrachat.retrieve.dense import _score
@@ -38,9 +40,21 @@ class HybridRetriever:
         self.store.ensure_keyword_index()
 
     def retrieve(self, query: str, k: int) -> list[Retrieved]:
+        return self.retrieve_explained(query, k)[0]
+
+    def retrieve_explained(self, query: str, k: int) -> tuple[list[Retrieved], dict]:
+        """`retrieve`, plus what each arm returned — for the trace, never for a decision.
+
+        Returned rather than stored on `self`: one retriever serves concurrent requests in
+        the API, so an attribute would hand one request another's arms.
+        """
+        t0 = time.perf_counter()
         vector = self.embedder.embed_query(query)
+        t1 = time.perf_counter()
         dense = self.store.search(vector, k)                  # [(Chunk, cosine distance)]
+        t2 = time.perf_counter()
         keyword = self.store.keyword_search(query, k)         # [chunk_id], best first
+        t3 = time.perf_counter()
 
         fused: dict[str, float] = {}
         for rank, (chunk, _) in enumerate(dense, 1):
@@ -58,5 +72,12 @@ class HybridRetriever:
             chunks[c.id] = c
         distances.update(self.store.cosine_distances(vector, keyword_only))
 
-        return [Retrieved(chunk=chunks[i], score=_score(distances[i]))
+        hits = [Retrieved(chunk=chunks[i], score=_score(distances[i]))
                 for i in order if i in chunks and i in distances]
+        arms = {
+            "dense": [c.id for c, _ in dense],
+            "keyword": list(keyword),
+            "ms": {"embed": (t1 - t0) * 1000, "dense": (t2 - t1) * 1000,
+                   "keyword": (t3 - t2) * 1000},
+        }
+        return hits, arms
