@@ -19,7 +19,7 @@ const GROUP_ICON: Record<string, LucideIcon> = { Kubernetes: Boxes, Docker: Cont
 
 // Where the 15-minute backend is started (docs/DEMO-PLAN.md § 4). Until that workflow
 // exists, the page runs on recorded answers only.
-const START_BACKEND_URL = "https://github.com/adssib/InfraChat/actions"
+const START_BACKEND_URL = "https://github.com/adssib/InfraChat/actions/workflows/CD_demo_up.yml"
 
 type Item = { kind: "run"; m: Message } | { kind: "offline"; id: string; question: string }
 

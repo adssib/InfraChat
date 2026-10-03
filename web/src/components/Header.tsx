@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 const GITHUB_PROFILE = "https://github.com/adssib"
-const START_BACKEND_URL = "https://github.com/adssib/InfraChat/actions"
+const START_BACKEND_URL = "https://github.com/adssib/InfraChat/actions/workflows/CD_demo_up.yml"
 
 export type Mode = "checking" | "live" | "offline"
 

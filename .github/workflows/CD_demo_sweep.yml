@@ -1,0 +1,53 @@
+# The safety net for CD_demo_up: every 15 minutes, delete any container app in
+# rg-infrachat whose expires-at tag has passed. If a session's own run dies before its
+# delete step (a runner crash, a cancelled job that never reached cleanup), this still
+# stops it within about 15 minutes of its expiry. The $5 budget alert is the net under
+# this one (infra/core/budget.tf).
+name: CD_demo_sweep
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: infrachat-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: delete expired sessions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # `az containerapp` lives in a CLI extension; install it without an interactive prompt.
+      - name: allow az extensions
+        run: az config set extension.use_dynamic_install=yes_without_prompt
+
+      # An app with no expires-at tag is treated as expired: nothing in this group is
+      # meant to run without one.
+      - name: sweep
+        run: |
+          now=$(date -u +%s)
+          az containerapp list -g rg-infrachat --query "[].{name:name, expires:tags.\"expires-at\"}" -o tsv |
+          while IFS=$'\t' read -r name expires; do
+            [ -z "$name" ] && continue
+            exp=$(date -u -d "${expires:-1970-01-01T00:00:00Z}" +%s 2>/dev/null || echo 0)
+            if [ "$exp" -le "$now" ]; then
+              echo "::warning::deleting $name (expired ${expires:-never tagged})"
+              az containerapp delete -n "$name" -g rg-infrachat --yes
+            else
+              echo "keeping $name until $expires"
+            fi
+          done
+          echo "apps left: $(az containerapp list -g rg-infrachat --query 'length(@)' -o tsv)"

@@ -1,0 +1,134 @@
+# The demo button: start the backend for a fixed time, then delete it.
+#
+#   Actions → CD_demo_up → Run workflow
+#
+# Applies infra/session (the container app) into the permanent environment from
+# infra/core, waits until /healthz answers, keeps it up for the chosen minutes, then
+# deletes it — on success, failure or cancellation. CD_demo_sweep is the safety net if
+# this run dies before its last step. GitHub Pages notices the session on its own: the
+# UI's pill turns Live while it's up (docs/DEMO-PLAN.md § 4).
+name: CD_demo_up
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: How long the backend stays up
+        type: choice
+        options: ["15", "30"]
+        default: "15"
+
+permissions:
+  contents: read
+  id-token: write   # the GitHub OIDC token Azure trusts (infra/core/github.tf)
+  actions: read     # to find the newest image CI built
+
+# One session at a time: a second click waits for the first to finish instead of
+# doubling the cost.
+concurrency:
+  group: infrachat-demo
+  cancel-in-progress: false
+
+env:
+  RG: rg-infrachat
+  APP: infrachat-api
+  SITE: https://adssib.github.io/InfraChat/
+  # Terraform's azurerm provider logs in with the same OIDC token, no secret involved.
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  session:
+    name: backend session (${{ inputs.minutes }} min)
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # The newest image that passed CI_docker_build's smoke test, by commit SHA, so the
+      # session says exactly which code it runs (/api/meta).
+      # `az containerapp` lives in a CLI extension; install it without an interactive prompt.
+      - name: allow az extensions
+        run: az config set extension.use_dynamic_install=yes_without_prompt
+
+      - name: pick the newest tested image
+        id: image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(gh run list --workflow CI_docker_build.yml --branch master --status success \
+                 --limit 1 --json headSha --jq '.[0].headSha')
+          test -n "$sha"
+          echo "tag=$sha" >> "$GITHUB_OUTPUT"
+          echo "image: ghcr.io/adssib/infrachat-api:$sha"
+
+      - name: clear a leftover session
+        run: |
+          if az containerapp show -n "$APP" -g "$RG" --query name -o tsv 2>/dev/null; then
+            echo "an earlier session is still up; replacing it"
+            az containerapp delete -n "$APP" -g "$RG" --yes
+          fi
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: start the backend
+        working-directory: infra/session
+        env:
+          TF_VAR_llm_api_key: ${{ secrets.INFRACHAT_LLM_API_KEY }}
+          TF_VAR_image_tag: ${{ steps.image.outputs.tag }}
+        run: |
+          expires=$(date -u -d "+${{ inputs.minutes }} min" +%Y-%m-%dT%H:%M:%SZ)
+          echo "EXPIRES_AT=$expires" >> "$GITHUB_ENV"
+          terraform init -input=false
+          TF_VAR_expires_at="$expires" terraform apply -auto-approve -input=false
+          echo "URL=$(terraform output -raw url)" >> "$GITHUB_ENV"
+
+      - name: wait until it answers
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf -m 5 "$URL/healthz" >/dev/null; then echo "healthy after ~$((i * 2))s"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::the backend never became healthy"; exit 1
+
+      - name: summary
+        run: |
+          {
+            echo "### InfraChat is live until \`$EXPIRES_AT\`"
+            echo
+            echo "Open **$SITE**: the pill reads **Live** while this run is going."
+            echo
+            echo "API: $URL · image \`${{ steps.image.outputs.tag }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: keep it up for ${{ inputs.minutes }} minutes
+        run: |
+          left=$(( $(date -d "$EXPIRES_AT" +%s) - $(date +%s) ))
+          echo "sleeping ${left}s until $EXPIRES_AT"
+          sleep "$(( left > 0 ? left : 0 ))"
+
+      # Runs on success, failure and cancellation. Logs in again first: the token from
+      # the start of the job may have expired during a 30-minute session.
+      - uses: azure/login@v3
+        if: always()
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: delete the backend
+        if: always()
+        run: |
+          az containerapp delete -n "$APP" -g "$RG" --yes 2>/dev/null || true
+          test "$(az containerapp list -g "$RG" --query 'length(@)' -o tsv)" = 0
+          echo "deleted at $(date -u +%H:%M:%SZ)"
