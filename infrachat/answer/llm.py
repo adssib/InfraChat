@@ -13,7 +13,9 @@ next, and the measured delta between phases would include that noise.
 from __future__ import annotations
 
 import os
-from typing import Protocol
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Callable, Protocol
 
 
 class LLMClient(Protocol):
@@ -78,23 +80,27 @@ class OpenAICompatClient:
                                   timeout=self.timeout, max_retries=self.max_retries)
         return self._client
 
-    def complete(self, system: str, user: str) -> str:
+    def _messages(self, system: str, user: str) -> list[dict]:
+        return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+    def _params(self) -> dict:
+        return dict(
+            model=self.model,
+            temperature=0,          # reproducible runs — see module docstring
+            max_tokens=self.max_tokens,
+            # Reasoning models only. The generator leaves it unset; the Phase 4
+            # rewriter sets "low" — measured 26 reasoning tokens and ~0.5s, against ~9s
+            # at the default, for a task that needs recall, not deliberation.
+            **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}),
+        )
+
+    @contextmanager
+    def _translated_errors(self):
+        """Provider errors → one RuntimeError with the fix in it. Shared by both paths."""
         from openai import APIStatusError, APIConnectionError, RateLimitError
 
         try:
-            response = self._get_client().chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                temperature=0,          # reproducible runs — see module docstring
-                max_tokens=self.max_tokens,
-                # Reasoning models only. The generator leaves it unset; the Phase 4
-                # rewriter sets "low" — measured 26 reasoning tokens and ~0.5s, against ~9s
-                # at the default, for a task that needs recall, not deliberation.
-                **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}),
-            )
+            yield
         except RateLimitError as e:
             raise RuntimeError(
                 f"rate limited by {self.base_url} — free tiers cap requests per minute. "
@@ -110,11 +116,10 @@ class OpenAICompatClient:
                 hint = f"  → model {self.model!r} may not exist on this provider"
             raise RuntimeError(f"{self.base_url} returned {e.status_code}: {e.message}\n{hint}") from e
 
-        choice = response.choices[0]
-        text = choice.message.content or ""
+    def _checked(self, text: str, finish_reason: str | None, reasoning_chars: int) -> str:
         # A rewriter may legitimately have nothing to add and stop cleanly with empty
         # content; truncation (finish_reason='length') is a failure for every caller.
-        if not text.strip() and self.allow_empty and choice.finish_reason != "length":
+        if not text.strip() and self.allow_empty and finish_reason != "length":
             return ""
         if not text.strip():
             # Reasoning models spend `max_tokens` on hidden reasoning first; when the
@@ -122,15 +127,85 @@ class OpenAICompatClient:
             # citation check and be recorded as a grounded refusal — an infrastructure
             # failure misreported as a correct decision, which quietly corrupts the
             # refusal metrics. Fail loudly instead.
-            reasoning = getattr(choice.message, "reasoning", None) or ""
             raise RuntimeError(
                 f"{self.model} returned an empty completion "
-                f"(finish_reason={choice.finish_reason!r}, "
-                f"reasoning={len(reasoning)} chars). "
+                f"(finish_reason={finish_reason!r}, "
+                f"reasoning={reasoning_chars} chars). "
                 f"If finish_reason is 'length', raise llm.max_tokens — reasoning tokens "
                 f"are spent from the same budget as the answer."
             )
         return text
+
+    def complete(self, system: str, user: str) -> str:
+        with self._translated_errors():
+            response = self._get_client().chat.completions.create(
+                messages=self._messages(system, user), **self._params()
+            )
+        choice = response.choices[0]
+        reasoning = getattr(choice.message, "reasoning", None) or ""
+        return self._checked(choice.message.content or "", choice.finish_reason, len(reasoning))
+
+    def stream(
+        self,
+        system: str,
+        user: str,
+        *,
+        on_token: Callable[[str], None] | None = None,
+        on_reasoning: Callable[[str], None] | None = None,
+    ) -> Streamed:
+        """`complete()`, delivered piece by piece — for the UI, never for the eval.
+
+        Returns the **whole** completion, checked exactly as `complete()` checks it, so
+        the citation gate downstream sees the same text either way. The callbacks only
+        let a caller *show* the pieces as they arrive; nothing is decided on them.
+
+        `on_reasoning` asks the provider for the model's reasoning stream. Verified on
+        Groq with gpt-oss-20b (docs/DEMO-PLAN.md § M3): it arrives in `delta.reasoning`,
+        ahead of the first answer token. `include_reasoning` is a Groq parameter, so it is
+        only sent when a caller wants reasoning.
+        """
+        extra = {"include_reasoning": True} if on_reasoning else {}
+        content: list[str] = []
+        reasoning_chars = 0
+        finish_reason = None
+        usage: dict = {}
+        with self._translated_errors():
+            raw = self._get_client().chat.completions.with_raw_response.create(
+                messages=self._messages(system, user), stream=True,
+                stream_options={"include_usage": True},
+                **({"extra_body": extra} if extra else {}), **self._params(),
+            )
+            headers = raw.headers
+            for chunk in raw.parse():
+                if chunk.usage:
+                    usage = chunk.usage.model_dump(exclude_none=True)
+                if not chunk.choices:
+                    continue
+                choice = chunk.choices[0]
+                finish_reason = choice.finish_reason or finish_reason
+                delta = choice.delta
+                piece = (delta.model_extra or {}).get("reasoning")
+                if piece:
+                    reasoning_chars += len(piece)
+                    if on_reasoning:
+                        on_reasoning(piece)
+                if delta.content:
+                    content.append(delta.content)
+                    if on_token:
+                        on_token(delta.content)
+        text = self._checked("".join(content), finish_reason, reasoning_chars)
+        ratelimit = {k.lower().removeprefix("x-ratelimit-"): v for k, v in headers.items()
+                     if k.lower().startswith("x-ratelimit-")}
+        return Streamed(text=text, usage=usage, ratelimit=ratelimit)
+
+
+@dataclass(frozen=True)
+class Streamed:
+    """What `stream()` returns: the checked text, plus what the provider reported."""
+
+    text: str
+    usage: dict             # prompt/completion tokens, as the provider reports them
+    ratelimit: dict         # the x-ratelimit-* headers, prefix stripped (Groq: per-minute)
 
 
 def build(cfg) -> LLMClient:
