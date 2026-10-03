@@ -20,5 +20,11 @@ resource "azurerm_container_app_environment" "env" {
   location            = azurerm_resource_group.core.location
   resource_group_name = azurerm_resource_group.core.name
   # logs_destination left unset: logs are streamed only, no Log Analytics workspace to pay for.
+  # Azure adds this serverless profile on create; declared so Terraform stops trying to
+  # remove it. Consumption-only: billed per second, no environment management fee.
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
   tags = { project = "infrachat", layer = "core" }
 }

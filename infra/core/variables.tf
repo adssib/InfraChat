@@ -11,3 +11,9 @@ variable "location" {
   type    = string
   default = "canadacentral"
 }
+
+variable "github_repo" {
+  description = "owner/name of the repository whose master-branch workflows may log in."
+  type        = string
+  default     = "adssib/InfraChat"
+}
