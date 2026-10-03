@@ -1,0 +1,47 @@
+# Both Terraform roots are formatted and valid: infra/core (the permanent Container Apps
+# environment) and infra/session (the 15-minute app). Offline — `init -backend=false`
+# and `validate` never log in to Azure, so this needs no credentials.
+name: CI_terraform
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/CI_terraform.yml"]
+  push:
+    branches: [master]
+    paths: ["infra/**", ".github/workflows/CI_terraform.yml"]
+
+permissions:
+  contents: read
+
+# A new push cancels the run it supersedes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: terraform (${{ matrix.root }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [core, session]
+    defaults:
+      run:
+        working-directory: infra/${{ matrix.root }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -diff
+
+      - name: terraform init (no backend)
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        run: terraform validate

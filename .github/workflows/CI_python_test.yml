@@ -1,0 +1,42 @@
+# The three test files: corpus filter matching, chunker overlap windows, citation tag
+# parsing — pure functions whose failures are silent (CLAUDE.md § Tests). The eval
+# harness is the real quality gate; it needs an LLM key and a built index, so it does
+# not run here.
+name: CI_python_test
+
+on:
+  pull_request:
+    paths: ["infrachat/**", "tests/**", "requirements*.txt", "sources.yaml", "config.yaml", ".github/workflows/CI_python_test.yml"]
+  push:
+    branches: [master]
+    paths: ["infrachat/**", "tests/**", "requirements*.txt", "sources.yaml", "config.yaml", ".github/workflows/CI_python_test.yml"]
+
+permissions:
+  contents: read
+
+# A new push cancels the run it supersedes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      # requirements-dev.txt pulls in every runtime pin with -r, so the tests import the
+      # same versions the image ships.
+      - name: install the pinned dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: pytest
+        run: pytest -q
