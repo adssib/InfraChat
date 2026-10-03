@@ -1,8 +1,9 @@
-import { CirclePause } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { Boxes, CirclePause, Container, ShieldAlert, type LucideIcon } from "lucide-react"
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 
 import { Composer } from "@/components/Composer"
 import { Exchange } from "@/components/Exchange"
+import { Header, type Mode } from "@/components/Header"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import examples from "@/examples.json"
 import { isFinished, newMessage, reduce, type Message, type TraceEvent } from "@/lib/events"
@@ -12,67 +13,45 @@ import { playReplay } from "@/lib/replay"
 
 type Group = { label: string; hint?: string; questions: string[] }
 
+const Report = lazy(() => import("@/pages/Report"))
+
+const GROUP_ICON: Record<string, LucideIcon> = { Kubernetes: Boxes, Docker: Container, "Try to trick it": ShieldAlert }
+
 // Where the 15-minute backend is started (docs/DEMO-PLAN.md § 4). Until that workflow
 // exists, the page runs on recorded answers only.
 const START_BACKEND_URL = "https://github.com/adssib/InfraChat/actions"
 
 type Item = { kind: "run"; m: Message } | { kind: "offline"; id: string; question: string }
 
-function Wordmark() {
-  return (
-    <span className="flex items-center gap-2 font-mono text-sm font-semibold tracking-tight">
-      <svg viewBox="0 0 32 32" className="size-5" aria-hidden>
-        <path d="M9 21V11m7 10V11m7 10v-6" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="text-primary" />
-      </svg>
-      infrachat
-    </span>
-  )
-}
-
-type Mode = "checking" | "live" | "offline"
-
-function ModePill({ mode }: { mode: Mode }) {
-  if (mode === "live")
-    return (
-      <span className="flex items-center gap-1.5 rounded-full border border-ok/30 px-2.5 py-1 text-xs text-foreground" title="Questions are answered live by the backend">
-        <span className="size-1.5 rounded-full bg-ok" aria-hidden />
-        Live
-      </span>
-    )
-  return (
-    <a
-      href={START_BACKEND_URL}
-      className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-      title="Live answers need the backend, which runs in 15-minute sessions"
-    >
-      <span className="size-1.5 rounded-full bg-muted-foreground/60" aria-hidden />
-      {mode === "checking" ? "Connecting" : "Recorded answers"}
-    </a>
-  )
-}
-
 function Examples({ onPick }: { onPick: (q: string) => void }) {
   return (
-    <div className="grid gap-6 sm:grid-cols-3">
-      {(examples as Group[]).map((g) => (
-        <section key={g.label} aria-labelledby={`ex-${g.label}`}>
-          <h2 id={`ex-${g.label}`} className="mb-2 px-2 text-xs font-medium text-muted-foreground">{g.label}</h2>
-          <ul className="space-y-0.5">
-            {g.questions.map((q) => (
-              <li key={q}>
-                <button
-                  type="button"
-                  onClick={() => onPick(q)}
-                  className="w-full rounded-lg px-2 py-1.5 text-left text-sm leading-5 text-foreground/85 transition-colors hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                >
-                  {q}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {g.hint && <p className="mt-2 px-2 text-xs text-muted-foreground">{g.hint}</p>}
-        </section>
-      ))}
+    <div className="grid gap-3 sm:grid-cols-3">
+      {(examples as Group[]).map((g) => {
+        const Icon = GROUP_ICON[g.label] ?? Boxes
+        const trick = g.label === "Try to trick it"
+        return (
+          <section key={g.label} aria-labelledby={`ex-${g.label}`} className="glass rounded-2xl p-2">
+            <h2 id={`ex-${g.label}`} className="flex items-center gap-2 px-2 pt-1.5 pb-2 text-xs font-medium text-muted-foreground">
+              <Icon className={trick ? "size-3.5 text-refuse" : "size-3.5 text-primary"} aria-hidden />
+              {g.label}
+            </h2>
+            <ul className="space-y-0.5">
+              {g.questions.map((q) => (
+                <li key={q}>
+                  <button
+                    type="button"
+                    onClick={() => onPick(q)}
+                    className="w-full rounded-xl px-2 py-1.5 text-left text-sm leading-5 text-foreground/85 transition-colors hover:bg-[var(--glass-strong)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  >
+                    {q}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {g.hint && <p className="px-2 pt-2 pb-1 text-xs text-muted-foreground">{g.hint}</p>}
+          </section>
+        )
+      })}
     </div>
   )
 }
@@ -81,9 +60,9 @@ function OfflineNotice({ question }: { question: string }) {
   return (
     <article className="space-y-5">
       <div className="flex justify-end">
-        <p className="max-w-[85%] rounded-2xl bg-card px-4 py-2.5 text-[15px] leading-6">{question}</p>
+        <p className="max-w-[85%] rounded-2xl rounded-br-md bg-[linear-gradient(135deg,rgb(41_159_255/0.22),rgb(139_92_246/0.18))] px-4 py-2.5 text-[15px] leading-6 ring-1 ring-white/10">{question}</p>
       </div>
-      <div className="flex gap-3 rounded-xl border px-4 py-3 text-sm">
+      <div className="glass flex gap-3 rounded-xl px-4 py-3 text-sm">
         <CirclePause className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
         <div className="space-y-1">
           <p className="font-medium">Live answers are off right now</p>
@@ -97,8 +76,16 @@ function OfflineNotice({ question }: { question: string }) {
   )
 }
 
+const pageFromHash = () => (window.location.hash.startsWith("#/report") ? "report" : "chat")
+
 export default function App() {
   const [items, setItems] = useState<Item[]>([])
+  const [page, setPage] = useState<"chat" | "report">(pageFromHash)
+  useEffect(() => {
+    const on = () => { setPage(pageFromHash()); window.scrollTo({ top: 0 }) }
+    window.addEventListener("hashchange", on)
+    return () => window.removeEventListener("hashchange", on)
+  }, [])
   const [mode, setMode] = useState<Mode>("checking")
   const modeRef = useRef<Promise<Mode> | null>(null)
   // Ask the backend once whether a session is up; every question waits on that answer, so
@@ -143,14 +130,11 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="flex min-h-dvh flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between bg-background/85 px-4 py-3 backdrop-blur sm:px-6">
-          <button type="button" onClick={() => { abort.current?.abort(); setItems([]) }} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" aria-label="New conversation">
-            <Wordmark />
-          </button>
-          <ModePill mode={mode} />
-        </header>
+        <Header mode={mode} page={page} onHome={() => { abort.current?.abort(); setItems([]); window.location.hash = "#/" }} />
 
-        {empty ? (
+        {page === "report" ? (
+          <Suspense fallback={<div className="flex-1" />}><Report /></Suspense>
+        ) : empty ? (
           <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 pb-16 sm:px-6">
             <h1 className="text-[clamp(1.75rem,4vw,2.25rem)] leading-tight font-medium tracking-tight text-balance">
               Ask the Kubernetes and Docker docs.
@@ -169,7 +153,7 @@ export default function App() {
                 : <OfflineNotice key={it.id} question={it.question} />))}
               <div ref={bottom} />
             </main>
-            <div className="sticky bottom-0 bg-gradient-to-t from-background from-70% to-transparent px-4 pt-6 pb-4 sm:px-6">
+            <div className="sticky bottom-0 px-4 pt-6 pb-4 sm:px-6 [background:linear-gradient(to_top,var(--background)_55%,transparent)]">
               <div className="mx-auto max-w-3xl"><Composer onSend={ask} busy={busy} /></div>
             </div>
           </>

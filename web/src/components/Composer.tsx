@@ -24,7 +24,7 @@ export function Composer({ onSend, busy, autoFocus }: { onSend: (q: string) => v
   return (
     <form
       onSubmit={send}
-      className="flex items-end gap-2 rounded-2xl border border-input bg-card p-2 pl-4 shadow-[0_1px_0_rgb(255_255_255/0.03)_inset] focus-within:border-ring"
+      className="glass flex items-end gap-2 rounded-2xl p-2 pl-4 transition-shadow focus-within:shadow-[inset_0_1px_0_var(--glass-highlight),0_0_0_1px_rgb(41_159_255/0.45),0_10px_40px_-12px_rgb(41_159_255/0.35)]"
     >
       <label htmlFor="question" className="sr-only">Your question</label>
       <textarea
@@ -48,7 +48,7 @@ export function Composer({ onSend, busy, autoFocus }: { onSend: (q: string) => v
         size="icon"
         disabled={!value.trim() || busy}
         aria-label="Send"
-        className={cn("size-9 shrink-0 rounded-full")}
+        className={cn("accent-gradient size-9 shrink-0 rounded-full text-white shadow-[0_4px_18px_-4px_rgb(41_159_255/0.7)] transition-[transform,opacity] hover:scale-105 active:scale-95 disabled:opacity-35 disabled:shadow-none")}
       >
         <ArrowUp className="size-4" strokeWidth={2.5} />
       </Button>

@@ -2,7 +2,7 @@
 // the citation check (gate 2). A rail of steps while it works, one summary line after.
 
 import { Ban, Check, ChevronDown, LoaderCircle, Minus } from "lucide-react"
-import { useEffect, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { isFinished, type Message, type StepState } from "@/lib/events"
@@ -87,9 +87,9 @@ function summary(m: Message): string {
 
 export function Trace({ m }: { m: Message }) {
   const finished = isFinished(m)
+  // Open by default and left open: the trace is how an answer is checked, not a spinner
+  // to hide. Clicking the header still folds it.
   const [open, setOpen] = useState(true)
-  // Collapse once the run settles: the trace is the show while it works and a receipt after.
-  useEffect(() => { if (finished) setOpen(false) }, [finished])
 
   const floorMeta = m.floor.score === null ? null : m.floor.score.toFixed(3)
   const citeMeta =
@@ -98,7 +98,7 @@ export function Trace({ m }: { m: Message }) {
     : null
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border bg-card/50">
+    <Collapsible open={open} onOpenChange={setOpen} className="glass rounded-2xl">
       <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
         <span className="truncate">{finished ? summary(m) : "Working through the docs"}</span>
         <span className="flex shrink-0 items-center gap-2 font-mono text-xs tabular-nums">
