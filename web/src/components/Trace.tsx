@@ -110,12 +110,14 @@ export function Trace({ m }: { m: Message }) {
         <ol className="px-4 pt-1 pb-4">
           <Step
             state={m.excerpts.length ? "passed" : "running"}
-            title={m.hybrid ? "Searched by meaning and by keyword" : "Searched by meaning"}
+            title={m.excerpts.length
+              ? (m.hybrid ? "Searched by meaning and by keyword" : "Searched by meaning")
+              : (m.hybrid ? "Searching by meaning and by keyword" : "Searching by meaning")}
             meta={m.searchMs ? fmtMs(m.searchMs) : null}
           >
             {m.excerpts.length > 0 && <Excerpts m={m} />}
           </Step>
-          <Step state={m.floor.state} title="Similarity check" meta={floorMeta}>
+          <Step state={m.excerpts.length ? m.floor.state : "waiting"} title="Similarity check" meta={floorMeta}>
             {m.floor.score !== null && (
               <FloorMeter score={m.floor.score} floor={m.floor.threshold} passed={m.floor.state === "passed"} />
             )}

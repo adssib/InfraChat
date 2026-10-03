@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import examples from "@/examples.json"
 import { isFinished, newMessage, reduce, type Message, type TraceEvent } from "@/lib/events"
 import { askLive, backendIsUp } from "@/lib/live"
+import { paced } from "@/lib/pace"
 import { playReplay } from "@/lib/replay"
 
 type Group = { label: string; hint?: string; questions: string[] }
@@ -115,8 +116,8 @@ export default function App() {
     const id = crypto.randomUUID()
     const live = (await modeRef.current) === "live"
     setItems((xs) => [...xs, { kind: "run", m: newMessage(id, question, live ? "live" : "replay") }])
-    const onEvent = (e: TraceEvent) =>
-      setItems((xs) => xs.map((x) => (x.kind === "run" && x.m.id === id ? { kind: "run", m: reduce(x.m, e) } : x)))
+    const onEvent = paced((e: TraceEvent) =>
+      setItems((xs) => xs.map((x) => (x.kind === "run" && x.m.id === id ? { kind: "run", m: reduce(x.m, e) } : x))), ctrl.signal)
     let found = true
     if (live) await askLive(question, onEvent, ctrl.signal)
     else found = await playReplay(question, onEvent, ctrl.signal)
