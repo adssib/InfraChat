@@ -1,0 +1,29 @@
+[
+  {
+    "label": "Kubernetes",
+    "questions": [
+      "What is a Pod?",
+      "What does CrashLoopBackOff mean?",
+      "When a node runs out of memory, which pod gets killed first?",
+      "How do I stop two copies of the same app from being placed on one node?"
+    ]
+  },
+  {
+    "label": "Docker",
+    "questions": [
+      "What is a multi-stage build?",
+      "How do I pass a secret to a build without baking it into the image?",
+      "How do I set BUILDKIT_INLINE_CACHE=1?",
+      "How do I stop pip install from running again every time I change my source code?"
+    ]
+  },
+  {
+    "label": "Try to trick it",
+    "hint": "These aren't in the docs. Watch it refuse.",
+    "questions": [
+      "How do I bake sourdough bread?",
+      "How do I set up a GitLab CI pipeline to build and push my image?",
+      "How do I write a docker-compose.yml to run my web app and database together?"
+    ]
+  }
+]

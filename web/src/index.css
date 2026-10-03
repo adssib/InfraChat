@@ -1,0 +1,132 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+    --color-ok: var(--ok);
+    --color-refuse: var(--refuse);
+    --color-error: var(--error);
+    --color-surface-raised: var(--surface-raised);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Grok's palette, read from grok.com's stylesheet (docs/DEMO-PLAN.md § Look), mapped onto
+   shadcn's variables. Monochrome surfaces, white-alpha borders, one blue accent. The three
+   status colours are InfraChat's own and always travel with an icon and a label. */
+:root {
+    --background: #fcfcfc;
+    --foreground: #050505;
+    --card: #f7f7f7;
+    --card-foreground: #050505;
+    --popover: #f7f7f7;
+    --popover-foreground: #050505;
+    --primary: #0890ff;
+    --primary-foreground: #fcfcfc;
+    --secondary: #f2f2f2;
+    --secondary-foreground: #050505;
+    --muted: #f2f2f2;
+    --muted-foreground: #636363;
+    --accent: #e8e8e8;
+    --accent-foreground: #050505;
+    --surface-raised: #ffffff;
+    --destructive: #e34948;
+    --border: rgb(0 0 0 / 6%);
+    --input: rgb(0 0 0 / 10%);
+    --ring: rgb(0 0 0 / 15%);
+    --ok: #138a60;
+    --refuse: #b57b00;
+    --error: #d63b3a;
+    --radius: 0.75rem;
+}
+
+.dark {
+    /* Grok's warm body palette (hsl 30 5% 7% / 12%), lifted a step: charcoal, not pitch black. */
+    --background: #161514;
+    --foreground: #f4f3f1;
+    --card: #1f1e1c;
+    --card-foreground: #f4f3f1;
+    --popover: #23221f;
+    --popover-foreground: #f4f3f1;
+    --primary: #299fff;
+    --primary-foreground: #0b0b0a;
+    --secondary: #272623;
+    --secondary-foreground: #f4f3f1;
+    --muted: #272623;
+    --muted-foreground: #a3a19c;
+    --accent: #33312d;
+    --accent-foreground: #f4f3f1;
+    --surface-raised: #1f1e1c;
+    --destructive: #e34948;
+    --border: rgb(255 255 255 / 8%);
+    --input: rgb(255 255 255 / 13%);
+    --ring: rgb(255 255 255 / 22%);
+    --ok: #1baf7a;
+    --refuse: #eda100;
+    --error: #e34948;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans antialiased;
+    color-scheme: dark;
+    }
+  html:not(.dark) {
+    color-scheme: light;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* The draft's caret, while tokens arrive. */
+.caret {
+  display: inline-block; width: 0.5ch; height: 1.1em; margin-left: 0.1ch;
+  vertical-align: text-bottom; background: currentColor; opacity: 0.6;
+  animation: caret-blink 1s steps(1) infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
+
+/* The one orchestrated moment: gate 2 passes and raw tags become numbered sources. */
+.chip-in { animation: chip-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+@keyframes chip-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+
+.meter-fill { transition: width 500ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.retracted { animation: retract 600ms ease-out both; }
+@keyframes retract { from { opacity: 0.8; } to { opacity: 0.45; } }

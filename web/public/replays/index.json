@@ -1,0 +1,13 @@
+{
+ "What is a Pod?": "what-is-a-pod.json",
+ "What does CrashLoopBackOff mean?": "what-does-crashloopbackoff-mean.json",
+ "When a node runs out of memory, which pod gets killed first?": "when-a-node-runs-out-of-memory-which-pod-gets-killed-first.json",
+ "How do I stop two copies of the same app from being placed on one node?": "how-do-i-stop-two-copies-of-the-same-app-from-being-placed-o.json",
+ "What is a multi-stage build?": "what-is-a-multi-stage-build.json",
+ "How do I pass a secret to a build without baking it into the image?": "how-do-i-pass-a-secret-to-a-build-without-baking-it-into-the.json",
+ "How do I set BUILDKIT_INLINE_CACHE=1?": "how-do-i-set-buildkit-inline-cache-1.json",
+ "How do I stop pip install from running again every time I change my source code?": "how-do-i-stop-pip-install-from-running-again-every-time-i-ch.json",
+ "How do I bake sourdough bread?": "how-do-i-bake-sourdough-bread.json",
+ "How do I set up a GitLab CI pipeline to build and push my image?": "how-do-i-set-up-a-gitlab-ci-pipeline-to-build-and-push-my-im.json",
+ "How do I write a docker-compose.yml to run my web app and database together?": "how-do-i-write-a-docker-compose-yml-to-run-my-web-app-and-da.json"
+}

@@ -192,17 +192,17 @@ each one still behaves as labelled.
 
 **Colours: Grok's palette**, read from grok.com's own stylesheet (2026-10-03), mapped onto
 shadcn's CSS variables. Grok is almost entirely monochrome: near-black surfaces, a grey scale,
-borders as white at low opacity, and one blue accent. **Dark is the default.** Only the palette
+borders as white at low opacity, and one blue accent. **Dark is the default.** The dark column uses Grok's *warm body* palette (`hsl(30 5% 7%)` / `12%`), lifted a step: the pure `#050505` surface read as pitch black and was dropped (2026-10-03). Only the palette
 is borrowed: no logo, name or layout.
 
 | shadcn variable | Grok token | Dark (default) | Light |
 |---|---|---|---|
-| `--background` | surface-base | `#050505` | `#fcfcfc` |
-| `--card`, `--popover` | surface-l1 | `#141414` | `#f7f7f7` |
-| `--muted`, `--secondary` | surface-l2 | `#212121` | `#f2f2f2` |
-| `--accent` (hover) | surface-l3 | `#363636` | `#e8e8e8` |
-| `--foreground` | fg-primary | `#fcfcfc` | `#050505` |
-| `--muted-foreground` | fg-secondary | `#9e9e9e` | `#636363` |
+| `--background` | surface-base | `#161514` | `#fcfcfc` |
+| `--card`, `--popover` | surface-l1 | `#1f1e1c` | `#f7f7f7` |
+| `--muted`, `--secondary` | surface-l2 | `#272623` | `#f2f2f2` |
+| `--accent` (hover) | surface-l3 | `#33312d` | `#e8e8e8` |
+| `--foreground` | fg-primary | `#f4f3f1` | `#050505` |
+| `--muted-foreground` | fg-secondary | `#a3a19c` | `#636363` |
 | placeholder | fg-tertiary | `#858585` | `#858585` |
 | `--border`, `--input` | border-l1 / l2 | white 8% / 14% | black 6% / 10% |
 | `--ring` | border-l3 | white 20% | black 15% |
