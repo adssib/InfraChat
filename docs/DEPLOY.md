@@ -1,187 +1,150 @@
 # Deploying InfraChat
 
-Two targets, one Dockerfile, and **one difference that drives everything else**: locally the
-index is a mounted volume, on the public demo it is baked into the image.
+Three pieces, each shipped its own way:
 
-| | Local / home-lab | Public demo (Hugging Face Spaces) |
-|---|---|---|
-| Stage | `--target app` | `demo` — the Dockerfile's **last** stage |
-| `data/infrachat.db` | bind-mounted from `./data`, read-write | **copied into the image**, never mounted |
-| `infrachat ingest` | **runs here.** This is where indexes are built | **never runs.** There is nothing to write to |
-| Embedding model | baked in (`/opt/fastembed`) | baked in — plus `HF_HUB_OFFLINE=1` |
-| Corpus (`./corpus`) | bind-mounted read-only | **absent.** The image ships the index built *from* it |
-| `INFRACHAT_LLM_API_KEY` | compose `env_file: .env` | Space **repository secret** |
+| Piece | Where it runs | How it gets there | Cost |
+|---|---|---|---|
+| **Web UI** (`web/`) | GitHub Pages, [adssib.github.io/InfraChat](https://adssib.github.io/InfraChat/), always on | `CD_pages` on every push to `web/**` | free |
+| **API** (`infrachat serve`) | Azure Container Apps, **only during a session** | `CD_demo_up`: the "Run workflow" button | ~$0.03 per 15-minute session |
+| **Index** (`infrachat.db`) | inside the API image | GitHub Release `index-v1`, baked in by `CI_docker_build` | free |
 
-Free-tier Spaces have an **ephemeral filesystem**: anything written at runtime is gone on the
-next restart, and there is no volume to mount. So the index is an *artifact* — built locally by
-`ingest`, shipped inside the image, read-only in production. That is the whole deployment model
-([ADR-0005](decisions/0005-one-sqlite-file.md), [ARCHITECTURE § Storage & packaging](ARCHITECTURE.md#storage--packaging)).
+With no session running, the UI plays recorded runs of its example questions. While a
+session is up, the same page answers live: it checks `/healthz` on load and its pill turns
+**Live**. The plan and the reasoning behind every choice here: [DEMO-PLAN.md](DEMO-PLAN.md).
+
+```mermaid
+flowchart LR
+    Push["push to master"] --> CI["CI_docker_build<br/>tests the image, pushes :sha"]
+    Rel[("Release index-v1<br/>infrachat.db")] --> CI
+    CI --> GHCR[("ghcr.io/adssib/infrachat-api")]
+    Push --> Pages["CD_pages"] --> Site["GitHub Pages UI"]
+    Button["Run workflow:<br/>CD_demo_up"] -->|"OIDC login,<br/>terraform apply"| App["infrachat-api<br/>Container App"]
+    GHCR --> App
+    Site -->|"live questions (SSE)"| App
+    Sweep["CD_demo_sweep<br/>every 15 min"] -.->|"deletes expired apps"| App
+```
+
+---
+
+## Start a live session
+
+**GitHub → Actions → CD_demo_up → Run workflow** (15 or 30 minutes).
+
+The run logs in to Azure, picks the newest image that passed CI, applies `infra/session`,
+waits until `/healthz` answers (about 40 s), writes the "live until" time to its summary, then
+sleeps and deletes the app, whether the run succeeds, fails or is cancelled. One session at a
+time: a second click waits for the first.
+
+Only someone with write access to the repository can press it. That protects the budget: a
+visitor can read the recorded answers and the report, but can't start the meter.
+
+**Measured 2026-10-03:** click to healthy in about a minute (including the runner and
+`terraform init`); a live question answers in about 3.3 s, with the trace and reasoning
+streaming through Azure's ingress unbuffered; teardown confirmed by the run.
+
+### What stops a session
+
+| Layer | What it does |
+|---|---|
+| `CD_demo_up`'s last step | Deletes the app at the expiry, on success, failure and cancellation (`if: always()`) |
+| `CD_demo_sweep` | Every 15 minutes, deletes any app whose `expires-at` tag has passed, or that has none |
+| Budget `infrachat-monthly` | Emails the subscription owners at $2.50 and $5 actual, and $5 forecast |
+
+If a session was started by hand (`terraform apply` from a laptop), the sweeper still catches
+it at its `expires-at`. To stop one immediately:
+
+```bash
+az containerapp delete -n infrachat-api -g rg-infrachat \
+  --subscription 2b812a74-f9f4-4848-b71d-eb7898148ce3 --yes
+```
+
+---
+
+## Azure, once: `infra/core`
+
+Applied from a laptop, once. Its state stays local and gitignored.
+
+```bash
+az login                                   # then check: az account show → Azure for Students
+terraform -chdir=infra/core init
+terraform -chdir=infra/core plan           # read it: only + lines, no - or -/+
+terraform -chdir=infra/core apply
+```
+
+| Resource | Why |
+|---|---|
+| `rg-infrachat` (canadacentral) | everything lives here; one group to scope access and spend |
+| `cae-infrachat`, Consumption | the Container Apps environment. It fixes the API's hostname, `infrachat-api.<default_domain>`, which the Pages build hard-codes. $0 with no app running |
+| `id-infrachat-github` + federated credential | lets **only** this repo's `master` workflows log in, with no stored password |
+| Contributor on `rg-infrachat` | the identity can't touch anything outside the group |
+| budget `infrachat-monthly` | the alert above |
+
+Things this subscription taught us, each now encoded in the Terraform:
+
+- **Azure for Students allows five regions**: francecentral, northcentralus, norwayeast,
+  westus, canadacentral. `eastus` fails with `RequestDisallowedByAzure`.
+- **`Microsoft.ManagedIdentity` had to be registered** on the subscription before the identity
+  could be created (`az provider register -n Microsoft.ManagedIdentity`).
+- **GitHub's OIDC subject names the owner and repo by id**:
+  `repo:adssib@75389300/InfraChat@1351873446:ref:refs/heads/master`. A subject without the ids
+  is rejected (`AADSTS700213`).
+- **Azure adds a `Consumption` workload profile** to a new environment; it's declared so
+  Terraform doesn't plan to remove it.
+
+The workflows read three **repository variables** (not secrets; they identify, they don't
+authenticate): `AZURE_CLIENT_ID` (the identity), `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
+The one **secret** is `INFRACHAT_LLM_API_KEY`: GitHub secret → `TF_VAR_llm_api_key` → Container
+App secret → env var. It's never in the image, the repo, a file or a log.
+
+---
+
+## The image
+
+`CI_docker_build` on every push that touches the code:
+
+1. downloads `infrachat.db` from Release `index-v1` and checks its pinned sha256,
+2. builds the image (the embedding model is pre-warmed into it),
+3. **smoke-tests it with `--network none`**: no network, no volume, no key, and it must still
+   retrieve the Pods page for "what is a Pod?",
+4. checks it doesn't run as root,
+5. on `master`, pushes `ghcr.io/adssib/infrachat-api:<sha>` and `:latest` (public).
+
+**Changing the corpus** means: re-ingest locally, `gh release create index-v2 data/infrachat.db`,
+and bump `INDEX_VERSION` and `INDEX_SHA256` in `CI_docker_build.yml`. That commit is the record
+that the index changed, and a new index invalidates comparison with earlier eval runs.
+
+**Size: 457 MB** (CI, 2026-10-03), down from 630 MB when Gradio and its 26 dependencies were
+removed. No torch: `fastembed` runs the model through onnxruntime (ADR-0005).
+
+Notes before changing the Dockerfile:
+
+- **`-slim`, not `-alpine`.** onnxruntime publishes manylinux wheels only. The builder installs
+  with `--only-binary=:all:`, so a dependency that wants to compile stops the build instead.
+- **Loadable SQLite extensions work in `python:3.12-slim`** (sqlite-vec needs them).
+- **The embedder name is read from `config.yaml` at build time**, never repeated, because it's
+  held fixed across phases.
+- **`ENTRYPOINT` is `python -m infrachat` and `CMD` is `serve`**, so the container runs the API
+  on :8000 by default and any subcommand otherwise: `docker run <image> ask --retrieval-only "…"`.
+- **`/app/data` stays writable** even though the index is read-only in practice: the store opens
+  SQLite in WAL mode, which writes `-wal`/`-shm` files beside it.
 
 ---
 
 ## Local
 
 ```bash
-echo 'INFRACHAT_LLM_API_KEY=gsk_...' > .env      # gitignored; compose reads it, the image never does
+# Python side
+python -m infrachat serve -c config.yaml        # API on :8000 (key from INFRACHAT_LLM_API_KEY)
+python -m infrachat ask --trace "what is a Pod?"   # the same events, in the terminal
 
-docker compose build infrachat
-docker compose run --rm infrachat ingest --dry-run -c config.yaml   # walk + chunk, no writes
-docker compose run --rm infrachat ingest -c config.yaml            # build ./data/infrachat.db
-docker compose run --rm infrachat ask --retrieval-only "what is a Pod?"   # no key needed
-docker compose run --rm infrachat ask "how do I expose a Deployment?"     # needs the key
-docker compose run --rm infrachat eval -c config.yaml              # writes ./eval/runs/*.jsonl
-docker compose up infrachat                                        # the UI on :7860
+# Web side (Node 22: web/.nvmrc)
+cd web && npm install && npm run dev            # http://localhost:5173/InfraChat/
 ```
 
-- **The key never enters the image.** `config.yaml` names the env var (`llm.api_key_env`);
-  compose injects the value from `.env` (gitignored, and excluded in `.dockerignore`). No
-  `python-dotenv` anywhere — by the time the process starts this is an ordinary environment
-  variable. `.env` is optional: `ingest` and `ask --retrieval-only` never read the key.
-- **The container runs as uid 1000**, which is the normal desktop uid, so `./data` is writable
-  through the mount with no `chown` dance.
-- **`./data` must stay writable even for reads.** The store opens the database in WAL mode
-  (`infrachat/store/chunks.py`), and WAL creates `-wal`/`-shm` files beside it. That is why the
-  volume is not mounted `:ro`.
-- `./corpus` *is* mounted `:ro` — `ingest` only ever reads it. `./eval` is mounted read-write,
-  because eval run results are committed artifacts and belong on the host.
+The dev UI talks to `http://localhost:8000` (set `VITE_API_URL` to point elsewhere) and falls
+back to recorded runs when nothing answers there. The API's CORS allows the Pages site and
+`localhost:5173`; the deployed session allows only the Pages site.
 
-## The demo image
-
-```bash
-# 1. build the index locally first — the demo stage cannot be built without it
-docker compose run --rm infrachat ingest -c config.yaml
-
-# 2. build the image Spaces will build (last stage, no --target needed)
-docker build --provenance=false --sbom=false -t infrachat:demo .
-
-# 3. prove it behaves like the Space: no volume, no network, no API key
-docker run --rm --network none infrachat:demo ask --retrieval-only "what is a Pod?"
-#   → passed: top-1 0.834 vs floor 0.55 (margin +0.284)     [verified 2026-09-11]
-```
-
-Step 3 is the real test of this deployment model. `--network none` proves the image needs
-neither HuggingFace (model pre-warmed into `/opt/fastembed` at build time) nor a volume
-(index at `/app/data/infrachat.db`). If `data/infrachat.db` is missing, the build fails at the
-`COPY` — deliberately: a demo image with no index answers nothing.
-
-**Updating the demo = rebuilding the image.** There is no other path. Re-ingest locally, rebuild,
-push.
-
-## Hugging Face Spaces
-
-Spaces with `sdk: docker` builds the repo's `Dockerfile` with **no `--target`**, so the final
-stage is what gets deployed — hence `demo` is last. Do not reorder the stages.
-
-**1. Add YAML frontmatter to `README.md`** — it must be the very first thing in the file, above
-the `# InfraChat` heading. Spaces reads it as the Space card:
-
-```yaml
----
-title: InfraChat
-emoji: 📘
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
----
-```
-
-`sdk: docker` and `app_port: 7860` are the load-bearing lines. The image already matches:
-`EXPOSE 7860`, plus `GRADIO_SERVER_NAME=0.0.0.0` and `GRADIO_SERVER_PORT=7860` so the UI binds
-a reachable interface rather than localhost.
-
-**2. Set the secret.** Space → *Settings* → *Variables and secrets* → **secret** named
-`INFRACHAT_LLM_API_KEY`. A *variable* is visible in the Space UI and build logs; a *secret* is
-not. Never bake it into the image, and never commit it.
-
-**3. Push, including the index.** `data/` is gitignored in this repo, so the index has to be
-force-added on the branch you push to the Space, and it is ~12MB — over HF's 10MB plain-git
-threshold, so it needs LFS:
-
-```bash
-git remote add space https://huggingface.co/spaces/<user>/infrachat
-echo 'data/infrachat.db filter=lfs diff=lfs merge=lfs -text' >> .gitattributes
-git lfs install && git add .gitattributes
-git add -f data/infrachat.db
-git commit -m "demo: ship the pre-built index"
-git push space HEAD:main
-```
-
-If LFS is a nuisance, the alternative is to host `infrachat.db` in a HF **Dataset** repo and
-`RUN curl` it in the `demo` stage — same model (an artifact baked in at build time), different
-transport.
-
-**4. Cold start.** Nothing is downloaded at boot: model and index are both in the image. Expect
-the usual Spaces container-start delay plus loading a 384-dim ONNX model, not a 65MB fetch.
-
----
-
-## Image size — measured, not assumed
-
-`docker history` on the `demo` image, **2026-09-11, linux/amd64**:
-
-| Layer | Size |
-|---|---|
-| `python:3.12-slim` base (Debian trixie + CPython 3.12.14) | 142 MB |
-| `/opt/venv` — all of `requirements.txt` | 467 MB |
-| `/opt/fastembed` — pre-warmed `BAAI/bge-small-en-v1.5` ONNX | 67 MB |
-| `data/infrachat.db` — 281 files · 4519 chunks · 4519 vectors | 13 MB |
-| `infrachat/` + `config.yaml` + `sources.yaml` | 0.4 MB |
-| **total** | **690 MB uncompressed · ~255 MB compressed (what a push transfers)** |
-
-The `app` stage is the same minus the index: **677 MB**.
-
-**No torch. Verified:**
-
-```bash
-docker run --rm --entrypoint sh infrachat:demo -c 'pip list | grep -iE "^(torch|tensorflow)"'
-# → no output. fastembed runs the model through onnxruntime (ADR-0005).
-```
-
-The only `torch` hits in the image are dead filenames — `huggingface_hub/serialization/_torch.py`
-and `onnxruntime/transformers/*`, optional conversion helpers that are never imported. A real
-torch dependency would add 2–4 GB, which is the entire reason `fastembed` was chosen.
-
-**Why 690 MB and not the ~300 MB quoted in ADR-0005.** That figure counts site-packages for the
-*minimal* dependency set and nothing else. Three things are on top of it, and two are recent:
-
-- +142 MB base image and +67 MB baked model — never counted in the 223 MB figure.
-- +198 MB from `requirements.txt` being regenerated with `pip freeze` against the dev venv on
-  2026-09-11: **gradio 83 MB** and its transitive **pandas 73 MB** (needed once `serve` lands),
-  plus **pytest / pluggy / iniconfig**, which are test-only and have no business in a runtime
-  image. Before that regeneration this image measured **492 MB**.
-
-The lever, when size matters: split `requirements.txt` into runtime and dev sets. `pandas` is
-pulled by gradio, not by InfraChat; `pillow` (21 MB) serves fastembed's image-embedding path,
-which the text pipeline never touches; `pip` itself is 13 MB of the venv. None of that is a
-Dockerfile change, so none of it was done here.
-
-## Things worth knowing before you change the Dockerfile
-
-- **`-slim`, not `-alpine`.** `onnxruntime` publishes manylinux wheels only; on musl, pip would
-  fall back to compiling it. The builder passes `--only-binary=:all:` as a tripwire: if any
-  dependency ever wants to build from source, the build stops instead of quietly needing a
-  compiler.
-- **Loadable SQLite extensions work in `python:3.12-slim`** — the constraint ADR-0005 flags as
-  "some distro-built Pythons disable it". Verified in the image:
-  `sqlite-vec v0.1.9 | sqlite 3.46.1`.
-- **The embedder name is read from `config.yaml` at build time**, not repeated in the
-  Dockerfile. The embedder is one of the four things held fixed across phases
-  ([CLAUDE.md](../CLAUDE.md)); two copies of its name would be two places to drift.
-- **`ENTRYPOINT` is `python -m infrachat`**, so the container's command *is* the subcommand:
-  `docker run infrachat:demo ask --retrieval-only "..."`.
-
-## Known gaps
-
-- **`serve` is not wired yet.** `CMD` already points at it; today `docker compose up` prints
-  `infrachat serve is not built yet` and exits 2. The Dockerfile needs no change when the UI
-  lands — gradio is already in the image.
-- **`eval` is not built yet either**, and like `ingest` it is a *local* job, not something the
-  demo image does. So nothing under `eval/` is baked in: the local service mounts `./eval`
-  read-write instead, which puts the question set in and leaves `eval/runs/*.jsonl` — the
-  committed output — on the host. `.dockerignore` keeps `eval/runs/` out of the build context.
-- **Nothing here has been run on Spaces.** Everything above was verified locally, including the
-  no-volume/no-network demo path; the Spaces-specific claims (frontmatter keys, `app_port`, uid
-  1000, the 10MB LFS threshold, secret injection) come from HF's documented behaviour and should
-  be confirmed on the first real deploy.
+With Docker instead (`docker compose`): `ingest`, `ask` and `eval` run against `./data`,
+`./corpus` and `./eval` mounted from the host, and `docker compose up infrachat` serves the API
+on :8000. The key comes from a gitignored `.env`, injected by compose, never baked in.
