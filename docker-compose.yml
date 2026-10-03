@@ -16,7 +16,7 @@
 #   docker compose run --rm infrachat ask --retrieval-only "what is a Pod?"
 #   docker compose run --rm infrachat ask "how do I expose a Deployment?"  # needs the key
 #   docker compose run --rm infrachat eval -c config.yaml                 # needs the key
-#   docker compose up infrachat                                           # the UI, :7860
+#   docker compose up infrachat                                           # the API, :8000
 
 name: infrachat
 
@@ -46,8 +46,8 @@ services:
       # has to land on the host, not inside a container layer.
       - ./eval:/app/eval
     ports:
-      - "7860:7860"         # same port as Spaces, so local and demo behave identically
-    # `serve` is not wired yet: today `compose up` exits 2 with a message saying so.
+      - "8000:8000"         # the API; the UI is a separate static site (web/, GitHub Pages)
+    # `serve` is being rebuilt as a Litestar API: until it lands it exits 2 and says so.
     command: ["serve", "-c", "config.yaml"]
 
   demo:
@@ -67,5 +67,5 @@ services:
     # `infrachat ingest` never runs inside it. If this service can answer a question with
     # no volume attached, so can the Space.
     ports:
-      - "7861:7860"         # a second port so it can run alongside the local service
+      - "8001:8000"         # a second port so it can run alongside the local service
     command: ["serve", "-c", "config.yaml"]

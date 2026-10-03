@@ -58,9 +58,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/venv/bin:$PATH \
     FASTEMBED_CACHE_PATH=/opt/fastembed \
-    HOME=/home/app \
-    GRADIO_SERVER_NAME=0.0.0.0 \
-    GRADIO_SERVER_PORT=7860
+    HOME=/home/app
 
 # uid 1000 deliberately: Spaces runs containers as uid 1000, and locally it is the
 # desktop user's uid, so the mounted ./data is writable with no chown dance.
@@ -81,14 +79,15 @@ COPY --chown=app:app config.yaml sources.yaml ./
 # (infrachat/store/chunks.py), and WAL creates `-wal`/`-shm` files next to it.
 RUN install --directory --owner=app --group=app /app/data
 
-# Gradio on 7860 — the port Hugging Face Spaces expects (docs/DEPLOY.md).
-EXPOSE 7860
+# The HTTP API (docs/DEMO-PLAN.md § 3). The UI is not in this image: it is a static
+# site on GitHub Pages that calls this port.
+EXPOSE 8000
 
 # Subcommands map onto the container's command: ingest | ask | eval | serve.
 #   docker run --rm infrachat:local ask --retrieval-only "what is a Pod?"
 ENTRYPOINT ["python", "-m", "infrachat"]
-# `serve` is not wired yet — today this exits 2 with an honest message instead of a
-# traceback, and when the UI lands this line already points at it.
+# `serve` is being rebuilt as a Litestar API; until it lands it exits 2 with a message
+# instead of a traceback, and this line already points at it.
 CMD ["serve", "-c", "config.yaml"]
 
 # --------------------------------------------------------------------------- app

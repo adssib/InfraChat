@@ -52,7 +52,7 @@ harder to spot and harder to unwind.
 | Reranker (P2) | `fastembed` `TextCrossEncoder` | `Xenova/ms-marco-MiniLM-L-6-v2`. Decides **order only** — `Retrieved.score` stays dense cosine (ADR-0008) |
 | Store | **one SQLite file** — `sqlite-vec` (vectors) + FTS5 `bm25()` (P3) + relational chunks/manifest | pre-1.0; the `store:` seam is the escape hatch |
 | LLM | Groq `openai/gpt-oss-20b`, OpenAI-compatible client | key from `INFRACHAT_LLM_API_KEY`, env var only. A **reasoning** model: hidden reasoning spends `max_tokens`. Free tier = 200K tokens/**day** ≈ one full 87-question eval run |
-| UI / CLI / config | Gradio · stdlib `argparse` · pydantic v2 | Gradio on port 7860 for Spaces |
+| API / UI / CLI / config | Litestar (planned) · React on GitHub Pages (planned) · stdlib `argparse` · pydantic v2 | Gradio retired; see `docs/DEMO-PLAN.md` |
 
 **`retrieval.floor` is 0.65, derived — not guessed.** Rule: `min(answerable top-1) − 1 SD` of the
 dense cosine distribution (`eval/floor-tuning.md`). No floor separates the classes on this corpus:
@@ -79,7 +79,7 @@ integration tests, no coverage target. The **eval harness is the real quality ga
 | Inspect retrieval (no LLM) | `python -m infrachat ask --retrieval-only -c config.yaml "<question>"` |
 | Eval | `python -m infrachat eval -c config.yaml` (add `--retrieval-only` for a free, LLM-less run) |
 | Compare two runs | `python scripts/compare_runs.py eval/runs/A.jsonl eval/runs/B.jsonl` |
-| Demo UI | `python -m infrachat serve -c config.yaml` |
+| API (being rebuilt) | `python -m infrachat serve -c config.yaml` — exits 2 until the Litestar API lands |
 
 ## Conventions
 
